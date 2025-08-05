@@ -8,4 +8,4 @@ target_include_directories(ReWizard PRIVATE
 	"${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
-
+target_link_libraries(ReWizard PRIVATE LIEF::LIEF)

@@ -1,0 +1,20 @@
+include(FetchContent)
+
+set(LIEF_CMAKE_ARGS
+  -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+  -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+  -DLIEF_DOC=OFF
+  -DLIEF_PYTHON_API=OFF
+  -DLIEF_EXAMPLES=OFF
+  -DLIEF_TESTS=OFF
+)
+
+FetchContent_Declare(
+  lief
+  GIT_REPOSITORY https://github.com/lief-project/LIEF.git
+  GIT_TAG 0.16.5
+  GIT_SHALLOW TRUE
+  CMAKE_ARGS ${LIEF_CMAKE_ARGS}
+)
+
+FetchContent_MakeAvailable(lief)
