@@ -8,4 +8,6 @@ endif()
 
 project ("ReWizard")
 
+add_subdirectory ("thirdparty")
+
 add_subdirectory ("ReWizard")
