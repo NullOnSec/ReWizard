@@ -10,4 +10,5 @@ project ("ReWizard")
 
 add_subdirectory ("thirdparty")
 
-add_subdirectory ("ReWizard")
+add_subdirectory ("ReWizardLib")
+add_subdirectory ("ReWizardCLI")
