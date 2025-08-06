@@ -4,30 +4,50 @@
 #include <LIEF/Abstract.hpp>
 #include <string>
 #include <span>
+#include <optional>
+#include <memory>
 
 namespace ReWizard {
-	class FileLoader {
-	public:
-		FileLoader(const std::string& name);
+    enum class FileLoaderStatus {
+        Success,
+        EmptyFile,
+        InvalidSize,
+        FileOpenError,
+        LiefParserError,
+        AllocationError,
+        SectionLoaderError,
+        OutOfBoundsError,
 
-		bool Load(bool executable=false);
+    };
 
-		static size_t GetSize(std::unique_ptr<LIEF::Binary> &t);
-		static size_t GetHeaderSize(std::unique_ptr<LIEF::Binary>& t);
+    class FileLoader {
+    public:
+        static std::unique_ptr<FileLoader> Create(const std::string& name);
+        ~FileLoader();
 
-	private:
-		bool LoadSections();
+        bool Load(bool executable = false);
 
-	private:
-		std::unique_ptr<LIEF::Binary>	m_target{ nullptr };
-		size_t							m_mappedSize{ 0 };
-		uint8_t*						m_mappedPtr{ nullptr };
-		std::span<uint8_t>				m_mappedSpan = {};
-	};
+        static std::optional<size_t> GetSize(std::unique_ptr<LIEF::Binary>& t);
+        static std::optional<size_t> GetHeaderSize(std::unique_ptr<LIEF::Binary>& t);
 
-	class FileLoaderProvider {
+        FileLoaderStatus Status() { return m_status; }
 
-	};
+    private:
+        FileLoader(const std::string& name);
+        bool LoadSections();
+
+    private:
+        std::unique_ptr<LIEF::Binary>   m_target{ nullptr };
+        std::vector<uint8_t>            m_raw{};
+        std::span<uint8_t>              m_mappedSpan{};
+        size_t                          m_mappedSize{ 0 };
+        uint8_t*                        m_mappedPtr{ nullptr };
+        FileLoaderStatus                m_status = { FileLoaderStatus::Success };
+        
+    };
+
+    class FileLoaderProvider {
+    };
 }
 
 #endif

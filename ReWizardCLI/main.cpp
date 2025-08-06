@@ -1,10 +1,9 @@
 ﻿#include <iostream>
 
-#include <LIEF/Abstract.hpp>
-
+#include <ReWizard/ReWizard.h>
 
 int main() {
-	auto obj = LIEF::Parser::parse(R"(C:\Users\z\Downloads\Launcher\target.exe)");
-
+	auto loader = ReWizard::FileLoader::Create(R"(C:\Users\z\Downloads\Launcher\target.exe)");
+	loader->Load();
 	return 0;
 }
