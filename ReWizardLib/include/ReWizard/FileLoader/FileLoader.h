@@ -31,6 +31,9 @@ namespace ReWizard {
         static std::optional<size_t> GetHeaderSize(std::unique_ptr<LIEF::Binary>& t);
 
         FileLoaderStatus Status() { return m_status; }
+        std::span<uint8_t> Raw() { return m_mappedSpan; }
+        size_t MappedSize() { return m_mappedSize; };
+        LIEF::Binary* Binary() { return m_target.get(); }
 
     private:
         FileLoader(const std::string& name);
