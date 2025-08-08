@@ -2,6 +2,7 @@
 #define STATIC_GENERIC_PASS_H
 
 #include <ReWizard/Analysis/Passes/BasePass.hpp>
+#include <string_view>
 
 namespace ReWizard {
 	class AnalysisContext;
@@ -16,6 +17,7 @@ namespace ReWizard {
 		bool PreRun(AnalysisContext* context) override;
 		bool Run(AnalysisContext* context) override;
 		bool PostRun(AnalysisContext* context) override;
+		std::string_view Name() const override { return "StaticGenericPass"; }
 	};
 
 }

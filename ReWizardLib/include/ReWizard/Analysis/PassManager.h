@@ -15,14 +15,26 @@ namespace ReWizard {
 
     class AnalysisPassManager {
     public:
-        AnalysisPassManager() {
-            m_passes[0] = (std::make_unique<StaticGenericPass>());
+        AnalysisPassManager() { }
+
+        void AddPass(std::unique_ptr<BaseAnalysisPass>& p) { 
+            PassProvider::AddPass(p);
         }
 
         void RunAllAsync(AnalysisContext* ctx);
+        std::future<bool> RunAsync(AnalysisContext* ctx, BaseAnalysisPass* pass);
 
-    private:
-        std::array<std::unique_ptr<BaseAnalysisPass>, PassCount> m_passes;
+        BaseAnalysisPass* GetPassByName(const std::string& name) {
+            auto p = PassProvider::Get(name);
+            if (!p.has_value())
+                return nullptr;
+            return p.value().second;
+        }
+
+        const PassMap& GetAllPasses() {
+            return PassProvider::GetAll();
+        }
+
     };
 
 }

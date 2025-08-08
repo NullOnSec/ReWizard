@@ -1,6 +1,8 @@
 #ifndef BASE_PASS_H
 #define BASE_PASS_H
 
+#include <string_view>
+
 namespace ReWizard {
 	class AnalysisContext;
 
@@ -19,8 +21,10 @@ namespace ReWizard {
 		virtual bool PreRun(AnalysisContext* context) = 0;
 		virtual bool Run(AnalysisContext* context) = 0;
 		virtual bool PostRun(AnalysisContext* context) = 0;
+		virtual std::string_view Name() const = 0;
 
 		Type GetType() { return m_type; }
+		
 
 	protected:
 		Type m_type{ Type::GenericPass };

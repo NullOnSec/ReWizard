@@ -28,4 +28,5 @@ namespace ReWizard {
 	bool StaticGenericPass::PreRun(AnalysisContext* context) { UNUSED(context); return true; }
 	bool StaticGenericPass::PostRun(AnalysisContext* context) { UNUSED(context); return true; }
 
+	
 }
