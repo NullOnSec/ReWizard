@@ -2,7 +2,8 @@
 #define ANALYSIS_MANAGER_H
 
 #include <ReWizard/FileLoader/FileLoader.h>
-
+#include <set>
+#include <cstdint>
 
 namespace ReWizard {
 
@@ -18,7 +19,8 @@ namespace ReWizard {
 		Module* GetModule() { return m_module.get(); }
 		std::string GetName() { return m_targetName; }
 		const std::string& GetName() const { return m_targetName; }
-
+		std::set<uintptr_t>& GetVisited() { return m_visited; }
+		const std::set<uintptr_t>& GetVisited() const { return m_visited; }
 
 	private:
 		AnalysisContext(FileLoader* loader, Module* module, Disassembler& disassembler);
@@ -30,6 +32,7 @@ namespace ReWizard {
 		std::unique_ptr<Module> m_module;
 		std::string m_targetName;
 		Disassembler& m_disassembler;
+		std::set<uintptr_t> m_visited;
 	};
 
 	class AnalysisManager {
@@ -51,26 +54,7 @@ namespace ReWizard {
 		AnalysisManager(std::unique_ptr<AnalysisContext>& context);
 	};
 
-	class BaseAnalysisPass {
-	public:
-		BaseAnalysisPass();
 
-		enum class Type {
-			GenericPass,
-			PEPass,
-			MachOPass,
-			ELFPass,
-		};
-
-		virtual bool PreRun() = 0;
-		virtual bool Run() = 0;
-		virtual bool PostRun() = 0;
-
-		Type GetType() { return m_type; }
-
-	protected:
-		Type m_type = Type::GenericPass;
-	};
 
 }
 

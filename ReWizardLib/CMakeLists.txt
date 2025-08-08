@@ -2,7 +2,12 @@
 	"source/Disassembler/Disassembler.cpp"
 	"source/Analysis/Manager.cpp"
 	"source/FileLoader/FileLoader.cpp"
- "include/ReWizard/Analysis/Units/BasicBlock.h" "include/ReWizard/Analysis/Units/Function.h" "include/ReWizard/Analysis/Units/Module.h" "source/Analysis/Units/BasicBlock.cpp" "source/Analysis/Units/Function.cpp" "source/Analysis/Units/Module.cpp")
+	"source/Analysis/Units/BasicBlock.cpp"
+	"source/Analysis/Units/Function.cpp"
+	"source/Analysis/Units/Module.cpp"
+	"source/Analysis/Passes/StaticGenericPass.cpp"
+
+)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET ReWizardLib PROPERTY CXX_STANDARD 20)
