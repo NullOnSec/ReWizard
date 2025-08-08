@@ -7,6 +7,7 @@ namespace ReWizard {
 	class BaseAnalysisPass {
 	public:
 		BaseAnalysisPass() {};
+		virtual ~BaseAnalysisPass() = default;
 
 		enum class Type {
 			GenericPass,

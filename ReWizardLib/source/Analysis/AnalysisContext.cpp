@@ -1,19 +1,18 @@
-#include <ReWizard/Analysis/Manager.h>
-#include <ReWizard/Analysis/Units/Module.h>
+#include <ReWizard/Analysis/AnalysisContext.h>
+#include <ReWizard/FileLoader/FileLoader.h>
 
 
 namespace ReWizard {
-
-	std::unique_ptr<AnalysisContext> AnalysisContext::Create(const std::string &target) {
+	std::unique_ptr<AnalysisContext> AnalysisContext::Create(const std::string& target) {
 		auto loader = FileLoader::Create(target);
 
 		if (!loader || (loader && loader->Status() != FileLoaderStatus::Success)) {
-			loader.reset(nullptr); 
+			loader.reset(nullptr);
 			return nullptr;
 		}
 
 		if (!loader->Load()) {
-			loader.reset(nullptr); 
+			loader.reset(nullptr);
 			return nullptr;
 		}
 
@@ -38,28 +37,16 @@ namespace ReWizard {
 	}
 
 	AnalysisContext::AnalysisContext(std::unique_ptr<FileLoader>& loader, std::unique_ptr<Module>& module, Disassembler& disassembler)
-		: m_loader(std::move(loader)), m_module(std::move(module)), m_targetName(), m_disassembler(disassembler) { }
+		: m_loader(std::move(loader)), m_module(std::move(module)), m_targetName(), m_disassembler(disassembler) {
+	}
 
 	AnalysisContext::AnalysisContext(std::unique_ptr<FileLoader> loader, std::unique_ptr<Module> module, Disassembler& disassembler)
 		: m_loader(std::move(loader)), m_module(std::move(module)), m_targetName(), m_disassembler(disassembler) {
 	}
 
 	AnalysisContext::AnalysisContext(FileLoader* loader, Module* module, Disassembler& disassembler)
-		: m_loader(std::move(loader)), m_module(std::move(module)), m_targetName(), m_disassembler(disassembler) { }
-
-	AnalysisManager::AnalysisManager(std::unique_ptr<AnalysisContext>& context) 
-		: m_context(std::move(context)) { }
-
-	AnalysisManager::AnalysisManager(const std::unique_ptr<AnalysisContext>& context) 
-		: m_context(std::move(const_cast<std::unique_ptr<AnalysisContext>&>(context))) { }
-
-	std::unique_ptr<AnalysisManager> AnalysisManager::Create(std::unique_ptr<AnalysisContext>& context) {
-		return std::unique_ptr<AnalysisManager>(new AnalysisManager(context));
+		: m_loader(std::move(loader)), m_module(std::move(module)), m_targetName(), m_disassembler(disassembler) {
 	}
 
-	std::unique_ptr<AnalysisManager> AnalysisManager::Create(const std::unique_ptr<AnalysisContext>& context) {
-		return std::unique_ptr<AnalysisManager>(new AnalysisManager(context));
-	}
 
 }
-

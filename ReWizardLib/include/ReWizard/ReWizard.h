@@ -1,7 +1,9 @@
 #ifndef RE_WIZARD_H
 #define RE_WIZARD_H
 
-#include <ReWizard/Analysis/Manager.h>
+#include <ReWizard/Analysis/AnalysisContext.h>
+#include <ReWizard/Analysis/AnalysisManager.h>
+#include <ReWizard/Analysis/PassManager.h>
 #include <ReWizard/Analysis/Units/Module.h>
 #include <ReWizard/Analysis/Units/Function.h>
 #include <ReWizard/Analysis/Units/BasicBlock.h>

@@ -11,6 +11,8 @@ namespace ReWizard {
 		explicit StaticGenericPass()
 			: BaseAnalysisPass() { m_type = BaseAnalysisPass::Type::GenericPass; }
 
+		~StaticGenericPass() = default;
+
 		bool PreRun(AnalysisContext* context) override;
 		bool Run(AnalysisContext* context) override;
 		bool PostRun(AnalysisContext* context) override;

@@ -8,6 +8,9 @@ constexpr inline std::string_view target(R"(C:\Users\z\Downloads\Launcher\target
 
 int main() {
     auto context = ReWizard::AnalysisContext::Create(target.data());
+    auto manager = ReWizard::AnalysisManager::Create(context);
+
+    manager->Run();
 
     auto &disasm = ReWizard::Disassembler::Get(ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
 

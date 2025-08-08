@@ -1,7 +1,7 @@
 #include <ReWizard/Analysis/Passes/StaticGenericPass.h>
 #include <ReWizard/Analysis/Units/Module.h>
+#include <ReWizard/Analysis/AnalysisContext.h>
 #include <ReWizard/FileLoader/FileLoader.h>
-#include <ReWizard/Analysis/Manager.h>
 
 #include <queue>
 #include <set>

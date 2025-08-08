@@ -1,18 +1,21 @@
-#ifndef ANALYSIS_MANAGER_H
-#define ANALYSIS_MANAGER_H
+#ifndef ANALYSIS_CONTEXT_H
+#define ANALYSIS_CONTEXT_H
 
+#include <ReWizard/Disassembler/Disassembler.h>
 #include <ReWizard/FileLoader/FileLoader.h>
-#include <set>
+#include <ReWizard/Analysis/Units/Module.h>
+
+#include <string>
 #include <cstdint>
+#include <memory>
+#include <set>
 
 namespace ReWizard {
-
-	class BaseAnalysisPass;
 	class Module;
 
 	class AnalysisContext {
 	public:
-		static std::unique_ptr<AnalysisContext> Create(const std::string &target);
+		static std::unique_ptr<AnalysisContext> Create(const std::string& target);
 		~AnalysisContext() = default;
 
 		FileLoader* GetLoader() { return m_loader.get(); }
@@ -34,28 +37,6 @@ namespace ReWizard {
 		Disassembler& m_disassembler;
 		std::set<uintptr_t> m_visited;
 	};
-
-	class AnalysisManager {
-	public:
-		static std::unique_ptr<AnalysisManager> Create(std::unique_ptr<AnalysisContext>& context);
-		static std::unique_ptr<AnalysisManager> Create(const std::unique_ptr<AnalysisContext>& context);
-
-		FileLoader* Loader() { return m_context->GetLoader(); }
-		const FileLoader* Loader() const { return m_context->GetLoader(); }
-
-		std::string Name() { return m_context->GetName(); }
-		const std::string Name() const { return m_context->GetName(); }
-
-	private:
-		std::unique_ptr<AnalysisContext> m_context;
-
-	private:
-		AnalysisManager(const std::unique_ptr<AnalysisContext>& context);
-		AnalysisManager(std::unique_ptr<AnalysisContext>& context);
-	};
-
-
-
 }
 
 #endif

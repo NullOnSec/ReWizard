@@ -2,10 +2,8 @@
 #define UNITS_MODULE_H
 
 #include <ReWizard/FileLoader/FileLoader.h>
-
 #include <ReWizard/Analysis/Units/Function.h>
-#include <ReWizard/Analysis/Manager.h>
-
+#include <ReWizard/Analysis/AnalysisManager.h>
 
 #include <memory>
 #include <cstdint>
@@ -14,6 +12,7 @@
 #include <vector>
 
 namespace ReWizard {
+	class AnalysisContext;
 
 	using InstructionCollection = std::map<uintptr_t, std::unique_ptr<ExtendedInstruction>>;
 	using PtrFunction = std::unique_ptr<Function>;
@@ -39,13 +38,9 @@ namespace ReWizard {
 			return m_functions.back().get();
 		}
 
-		const std::string& GetPath() const {
-			return m_context->GetName();
-		}
+		const std::string GetPath() const;
 
-		FileLoader* GetLoader() const {
-			return m_context->GetLoader();
-		}
+		FileLoader* GetLoader() const;
 
 		FunctionCollection& GetFunctions()  {
 			return m_functions;
