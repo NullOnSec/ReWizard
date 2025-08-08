@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DISASSEMBLER_H
+#define DISASSEMBLER_H
 
 #include <Zydis/Zydis.h>
 #include <cstdint>
@@ -10,17 +11,48 @@
 
 namespace ReWizard {
 
-    class BaseInstruction {
-    public:
-        static std::unique_ptr<BaseInstruction> Create();
-        ~BaseInstruction() = default;
+    enum class InstructionType {
+        DecodedInstruction,
+        ExtendedInstruction,
+    };
 
-        ZydisDecodedInstruction instruction = {};
-        ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT] = {};
-        uintptr_t addr = {};
+    class DecodedInstruction {
+    public:
+        static std::unique_ptr<DecodedInstruction> Create();
+        ~DecodedInstruction() = default;
+
+        ZydisDecodedInstruction& Instruction() { return m_instruction; }
+        ZydisDecodedOperand* Operands() { return m_operands; }
+        const ZydisDecodedOperand* Operands() const { return m_operands; }
+        const uintptr_t Address() const { return m_addr; }
+        uintptr_t& Address() { return m_addr; }
+        InstructionType Type() { return m_type; }
+
+    protected:
+        DecodedInstruction() = default;
+
+    protected:
+        ZydisDecodedInstruction m_instruction = {};
+        ZydisDecodedOperand m_operands[ZYDIS_MAX_OPERAND_COUNT] = {};
+        uintptr_t m_addr = {};
+        InstructionType m_type = {InstructionType::DecodedInstruction};
+    };
+
+    class ExtendedInstruction : public DecodedInstruction {
+    public:
+        static std::unique_ptr<ExtendedInstruction> Create();
+        ~ExtendedInstruction() = default;
+
+        bool IsIndirect() const { return m_isIndirect; }
+        uintptr_t& IndirectValue() { return m_indirectValue; }
+        const uintptr_t IndirectValue() const { return m_indirectValue; }
 
     private:
-        BaseInstruction() = default;
+        ExtendedInstruction() = default;
+
+    private:
+        bool m_isIndirect = false;
+        uintptr_t m_indirectValue = { 0 };
     };
 
     class InternalDisassembler {
@@ -29,9 +61,12 @@ namespace ReWizard {
 
         static InternalDisassembler* Get(ZydisMachineMode md, ZydisStackWidth sw);
 
-        std::unique_ptr<BaseInstruction> DisassembleSingle(uint8_t* data, size_t dataSz);
-        std::string InstructionToString(BaseInstruction* insn, uintptr_t baseAddr, bool withAddr = true);
-        std::string InstructionToString(std::unique_ptr<BaseInstruction>& insn, uintptr_t baseAddr, bool withAddr = true);
+        template<typename T,
+            std::enable_if_t<
+            std::is_same_v<T, DecodedInstruction> || std::is_same_v<T, ExtendedInstruction>,
+            int> = 0>
+        std::unique_ptr<T> DisassembleSingle(uint8_t * data, size_t dataSz);
+        std::string InstructionToString(DecodedInstruction* insn, uintptr_t baseAddr, bool withAddr = true);
 
     private:
         InternalDisassembler(ZydisMachineMode md, ZydisStackWidth sw);
@@ -72,3 +107,5 @@ namespace ReWizard {
     };
 
 } // namespace ReWizard
+
+#endif

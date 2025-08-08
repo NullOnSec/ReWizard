@@ -9,4 +9,4 @@ target_include_directories(ReWizardCli PRIVATE
 	"${CMAKE_SOURCE_DIR}/ReWizardLib/include"
 )
 
-target_link_libraries(ReWizardCli PRIVATE LIEF::LIEF Zydis ReWizardLib)
+target_link_libraries(ReWizardCli PRIVATE LIEF::LIEF Zydis Boost::headers ReWizardLib)

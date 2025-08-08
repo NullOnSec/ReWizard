@@ -4,9 +4,18 @@
 
 namespace ReWizard {
 
-    std::unique_ptr<BaseInstruction> BaseInstruction::Create() {
-        return std::unique_ptr<BaseInstruction>(new BaseInstruction);
+    std::unique_ptr<DecodedInstruction> DecodedInstruction::Create() {
+        auto insn = std::unique_ptr<DecodedInstruction>(new DecodedInstruction);;
+        insn->m_type = InstructionType::DecodedInstruction;
+        return insn;
     }
+
+    std::unique_ptr<ExtendedInstruction> ExtendedInstruction::Create() {
+        auto insn = std::unique_ptr<ExtendedInstruction>(new ExtendedInstruction);;
+        insn->m_type = InstructionType::ExtendedInstruction;
+        return insn;
+    }
+
 
     std::map<std::pair<uintptr_t, uintptr_t>, std::unique_ptr<InternalDisassembler>> InternalDisassembler::instances;
 
@@ -27,20 +36,27 @@ namespace ReWizard {
         ZydisFormatterInit(&m_formatter, ZYDIS_FORMATTER_STYLE_INTEL);
     }
 
-    std::unique_ptr<BaseInstruction> InternalDisassembler::DisassembleSingle(uint8_t* data, size_t dataSz) {
-        auto instruction = BaseInstruction::Create();
-        if (ZydisDecoderDecodeFull(&m_decoder, data, dataSz, &instruction->instruction, instruction->operands) != ZYAN_STATUS_SUCCESS) {
+    template<
+        typename T,
+        std::enable_if_t<
+            std::is_same_v<T, DecodedInstruction> || std::is_same_v<T, ExtendedInstruction>,
+            int
+        >
+    >
+    std::unique_ptr<T> InternalDisassembler::DisassembleSingle(uint8_t* data, size_t dataSz) {
+        auto instruction = T::Create();
+        if (ZydisDecoderDecodeFull(&m_decoder, data, dataSz, &instruction->Instruction(), instruction->Operands()) != ZYAN_STATUS_SUCCESS) {
             return nullptr;
         }
-        instruction->addr = reinterpret_cast<uintptr_t>(data);
-        return std::move(instruction);
+        instruction->Address() = reinterpret_cast<uintptr_t>(data);
+        return instruction;
     }
 
-    std::string InternalDisassembler::InstructionToString(std::unique_ptr<BaseInstruction>& insn, uintptr_t baseAddr, bool withAddr) {
-        return InstructionToString(insn.get(), baseAddr, withAddr);
-    }
+    template std::unique_ptr<DecodedInstruction> InternalDisassembler::DisassembleSingle<DecodedInstruction>(uint8_t*, size_t);
+    template std::unique_ptr<ExtendedInstruction> InternalDisassembler::DisassembleSingle<ExtendedInstruction>(uint8_t*, size_t);
 
-    std::string InternalDisassembler::InstructionToString(BaseInstruction* insn, uintptr_t baseAddr, bool withAddr) {
+
+    std::string InternalDisassembler::InstructionToString(DecodedInstruction* insn, uintptr_t baseAddr, bool withAddr) {
         if (!insn) {
             return "";
         }
@@ -48,9 +64,9 @@ namespace ReWizard {
         char buffer[256];
         ZydisFormatterFormatInstruction(
             &m_formatter,
-            &insn->instruction,
-            insn->operands,
-            insn->instruction.operand_count_visible,
+            &insn->Instruction(),
+            insn->Operands(),
+            insn->Instruction().operand_count_visible,
             buffer,
             sizeof(buffer),
             baseAddr,

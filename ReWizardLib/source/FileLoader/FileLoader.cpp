@@ -17,7 +17,7 @@ namespace ReWizard {
     std::unique_ptr<FileLoader> FileLoader::Create(const std::string& name) {
         auto instance = std::unique_ptr<FileLoader>(new FileLoader(name));
 
-        if (instance->Status() != FileLoaderStatus::Success)
+        if (instance && instance->Status() != FileLoaderStatus::Success)
             return nullptr;
 
         return instance;
@@ -106,6 +106,8 @@ namespace ReWizard {
             m_status = FileLoaderStatus::SectionLoaderError;
             return false;
         }
+
+        SetArch();
 
         return true;
     }
