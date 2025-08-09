@@ -1,11 +1,11 @@
 #include <ReWizard/Analysis/AnalysisContext.h>
 #include <ReWizard/FileLoader/FileLoader.h>
-
+#include <optional>
 
 namespace ReWizard {
     static std::unique_ptr<FileLoader> MakeLoader(const std::string& target);
     static bool LoadBinary(std::unique_ptr<FileLoader>& loader);
-    static ArchPair GetArch(const std::unique_ptr<FileLoader>& loader);
+    static std::optional<ArchPair> GetArch(const std::unique_ptr<FileLoader>& loader);
     static Disassembler& GetDisassembler(const ArchPair& arch);
 
     std::unique_ptr<AnalysisContext> AnalysisContext::Create(const std::string& target) {
@@ -18,10 +18,10 @@ namespace ReWizard {
         }
 
         auto arch = GetArch(loader);
-        if (arch.first == ZYDIS_MACHINE_MODE_MAX_VALUE || arch.second == ZYDIS_STACK_WIDTH_MAX_VALUE)
+        if (!arch.has_value())
             return nullptr;
 
-        auto& disassembler = GetDisassembler(arch);
+        auto& disassembler = GetDisassembler(arch.value());
 
         auto ctx = std::unique_ptr<AnalysisContext>(new AnalysisContext(std::move(loader), nullptr, disassembler));
         if (!ctx) return nullptr;
@@ -35,7 +35,7 @@ namespace ReWizard {
         ctx->m_module = std::move(module);
         ctx->m_targetName = target;
 
-        return ctx;
+        return std::move(ctx);
     }
 
 	AnalysisContext::AnalysisContext(std::unique_ptr<FileLoader>& loader, std::unique_ptr<Module>& module, Disassembler& disassembler)
@@ -53,9 +53,9 @@ namespace ReWizard {
         return loader;
     }
 
-    ArchPair GetArch(const std::unique_ptr<FileLoader>& loader) {
+    std::optional<ArchPair> GetArch(const std::unique_ptr<FileLoader>& loader) {
         if (!loader || loader->Binary()->format() == LIEF::Binary::FORMATS::UNKNOWN)
-            return {};
+            return std::nullopt;
 
         return loader->Arch();
     }

@@ -1,13 +1,14 @@
 ﻿add_library (ReWizardLib STATIC
 	"source/Disassembler/Disassembler.cpp"
 	"source/FileLoader/FileLoader.cpp"
-	"source/Analysis/Units/BasicBlock.cpp"
-	"source/Analysis/Units/Function.cpp"
-	"source/Analysis/Units/Module.cpp"
-	"source/Analysis/Passes/StaticGenericPass.cpp"
 	"source/Analysis/AnalysisContext.cpp"
 	"source/Analysis/AnalysisManager.cpp"
 	"source/Analysis/PassManager.cpp"
+	"source/Analysis/Units/BasicBlock.cpp"
+	"source/Analysis/Units/Function.cpp"
+	"source/Analysis/Units/Module.cpp"
+	"source/Analysis/Passes/PassProvider.cpp"
+	"source/Analysis/Passes/StaticGenericPass.cpp"
 )
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)

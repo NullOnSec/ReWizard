@@ -1,7 +1,7 @@
 #ifndef ANALYSIS_PASS_MANAGER_H
 #define ANALYSIS_PASS_MANAGER_H
 
-#include <ReWizard/Analysis/Passes/Passes.hpp>
+#include <ReWizard/Analysis/Passes/PassProvider.h>
 
 
 #include <array>
@@ -17,7 +17,7 @@ namespace ReWizard {
     public:
         AnalysisPassManager() { }
 
-        void AddPass(std::unique_ptr<BaseAnalysisPass>& p) { 
+        void AddPass(std::unique_ptr<BaseAnalysisPass>& p) {
             PassProvider::AddPass(p);
         }
 

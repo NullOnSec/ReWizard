@@ -1,7 +1,7 @@
 #ifndef BASE_PASS_H
 #define BASE_PASS_H
 
-#include <string_view>
+#include <string>
 
 namespace ReWizard {
 	class AnalysisContext;

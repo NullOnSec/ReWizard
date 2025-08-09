@@ -9,7 +9,7 @@
 #define UNUSED(x) (void)x
 
 namespace ReWizard {
-
+	
 	bool StaticGenericPass::Run(AnalysisContext* context) {
 		if (!context) 
 			return false;
@@ -27,6 +27,8 @@ namespace ReWizard {
 	
 	bool StaticGenericPass::PreRun(AnalysisContext* context) { UNUSED(context); return true; }
 	bool StaticGenericPass::PostRun(AnalysisContext* context) { UNUSED(context); return true; }
-
 	
+	PassRegistrar<StaticGenericPass>::RegisterHelper StaticGenericPass::m_helper{};
 }
+
+template class ReWizard::PassRegistrar<ReWizard::StaticGenericPass>;
