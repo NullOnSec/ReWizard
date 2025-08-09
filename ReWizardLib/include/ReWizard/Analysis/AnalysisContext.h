@@ -26,7 +26,6 @@ namespace ReWizard {
 		const std::set<uintptr_t>& GetVisited() const { return m_visited; }
 
 	private:
-		AnalysisContext(FileLoader* loader, Module* module, Disassembler& disassembler);
 		AnalysisContext(std::unique_ptr<FileLoader> loader, std::unique_ptr<Module> module, Disassembler& disassembler);
 		AnalysisContext(std::unique_ptr<FileLoader>& loader, std::unique_ptr<Module>& module, Disassembler& disassembler);
 

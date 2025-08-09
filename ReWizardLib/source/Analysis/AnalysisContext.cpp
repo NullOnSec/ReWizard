@@ -44,9 +44,4 @@ namespace ReWizard {
 		: m_loader(std::move(loader)), m_module(std::move(module)), m_targetName(), m_disassembler(disassembler) {
 	}
 
-	AnalysisContext::AnalysisContext(FileLoader* loader, Module* module, Disassembler& disassembler)
-		: m_loader(std::move(loader)), m_module(std::move(module)), m_targetName(), m_disassembler(disassembler) {
-	}
-
-
 }

@@ -12,6 +12,5 @@ int main() {
 
     manager->Run();
 
-
 	return 0;
 }
