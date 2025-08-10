@@ -12,11 +12,14 @@ namespace ReWizard {
                 for (auto& [_, pass] : GetAllPasses()) {
                     if (pass) {
 
-                        if (!(ok = pass->PreRun(ctx))) break;
+                        if (!(ok = pass->PreRun(ctx))) 
+                            break;
 
-                        if (!(ok = pass->Run(ctx))) break;
+                        if (!(ok = pass->Run(ctx))) 
+                            break;
 
-                        if (!(ok = pass->PostRun(ctx))) break;
+                        if (!(ok = pass->PostRun(ctx))) 
+                            break;
 
                     }
                 }

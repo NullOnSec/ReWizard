@@ -29,12 +29,11 @@ namespace ReWizard {
             return std::make_unique<PassType>();
         }
 
+    private:
+        static bool Register();
+
     protected:
-        static inline bool Registered = []() {
-			//spdlog::info("Registering pass: {}", PassType().Name().data());
-            PassRegistry::AddFactory(&PassRegistrar<PassType>::Create);
-            return true;
-        }();
+        static inline bool Registered = Register();
     };
 
     class PassProvider {

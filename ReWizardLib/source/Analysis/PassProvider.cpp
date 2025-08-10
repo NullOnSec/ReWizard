@@ -44,7 +44,8 @@ namespace ReWizard {
     }
 
     void PassProvider::Init() {
-        if (m_initialized) return;
+        if (m_initialized) 
+            return;
 
         for (auto& factory : PassRegistry::Factories()) {
             auto passPtr = factory();
@@ -53,4 +54,11 @@ namespace ReWizard {
 
         m_initialized = true;
     }
+
+    template <typename PassType>
+    bool PassRegistrar<PassType>::Register() {
+        spdlog::info("Registering pass: {}", PassType().Name().data());
+        PassRegistry::AddFactory(&PassRegistrar<PassType>::Create);
+        return true;
+    };
 } // namespace ReWizard
