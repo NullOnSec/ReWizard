@@ -9,7 +9,7 @@
 #define UNUSED(x) (void)x
 
 namespace ReWizard {
-
+	
 	bool StaticGenericPass::Run(AnalysisContext* context) {
 		if (!context) 
 			return false;

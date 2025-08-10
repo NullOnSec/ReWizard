@@ -10,11 +10,11 @@ namespace ReWizard {
 		: m_context(std::move(const_cast<std::unique_ptr<AnalysisContext>&>(context))) {
 	}
 
-	std::unique_ptr<AnalysisManager> AnalysisManager::Create(std::unique_ptr<AnalysisContext>& context) {
-		return std::unique_ptr<AnalysisManager>(new AnalysisManager(context));
-	}
-
-	std::unique_ptr<AnalysisManager> AnalysisManager::Create(const std::unique_ptr<AnalysisContext>& context) {
+	std::unique_ptr<AnalysisManager> AnalysisManager::Create(const std::string& target) {
+		auto context = AnalysisContext::Create(target);
+		if (!context) {
+			return nullptr;
+		}
 		return std::unique_ptr<AnalysisManager>(new AnalysisManager(context));
 	}
 
