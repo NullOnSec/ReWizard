@@ -1,7 +1,7 @@
 #ifndef STATIC_GENERIC_PASS_H
 #define STATIC_GENERIC_PASS_H
 
-#include <ReWizard/Analysis/Passes/PassProvider.h>
+#include <ReWizard/Analysis/PassProvider.h>
 #include <string_view>
 
 namespace ReWizard {
@@ -18,9 +18,6 @@ namespace ReWizard {
         bool Run(AnalysisContext* context) override;
         bool PostRun(AnalysisContext* context) override;
         std::string_view Name() const override { return "StaticGenericPass"; }
-
-    private:
-        static PassRegistrar<StaticGenericPass>::RegisterHelper m_helper;
     };
     
 }

@@ -8,6 +8,7 @@
 #include <memory>
 #include <map>
 
+
 namespace ReWizard {
 
     using PassMap = std::map<std::string, std::unique_ptr<BaseAnalysisPass>>;
@@ -29,16 +30,11 @@ namespace ReWizard {
         }
 
     protected:
-        struct RegisterHelper {
-            RegisterHelper() {
-                PassRegistry::AddFactory(&PassRegistrar<PassType>::Create);
-            }
-        };
-        static RegisterHelper Register;
+        static inline bool Registered = []() {
+            PassRegistry::AddFactory(&PassRegistrar<PassType>::Create);
+            return true;
+        }();
     };
-
-    template <typename PassType>
-    typename PassRegistrar<PassType>::RegisterHelper PassRegistrar<PassType>::Register{};
 
     class PassProvider {
     public:

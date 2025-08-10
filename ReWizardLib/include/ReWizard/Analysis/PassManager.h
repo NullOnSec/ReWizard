@@ -1,7 +1,7 @@
 #ifndef ANALYSIS_PASS_MANAGER_H
 #define ANALYSIS_PASS_MANAGER_H
 
-#include <ReWizard/Analysis/Passes/PassProvider.h>
+#include <ReWizard/Analysis/PassProvider.h>
 
 
 #include <array>

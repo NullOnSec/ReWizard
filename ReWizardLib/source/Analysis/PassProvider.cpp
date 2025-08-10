@@ -1,4 +1,5 @@
-#include <ReWizard/Analysis/Passes/PassProvider.h>
+#include <ReWizard/Analysis/PassProvider.h>
+#include <ReWizard/Analysis/Passes/StaticGenericPass.h>
 
 namespace ReWizard {
 
@@ -43,7 +44,7 @@ namespace ReWizard {
             auto passPtr = factory();
             m_passes.emplace(std::string(passPtr->Name()), std::move(passPtr));
         }
+
         m_initialized = true;
     }
-
 } // namespace ReWizard
