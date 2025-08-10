@@ -1,4 +1,4 @@
-#include <ReWizard/Analysis/Passes/StaticGenericPass.h>
+#include <ReWizard/Analysis/Passes/StaticControlFlowRebuilder.h>
 #include <ReWizard/Analysis/Units/Module.h>
 #include <ReWizard/Analysis/AnalysisContext.h>
 #include <ReWizard/FileLoader/FileLoader.h>
@@ -10,7 +10,10 @@
 
 namespace ReWizard {
 	
-	bool StaticGenericPass::Run(AnalysisContext* context) {
+	bool StaticControlFlowRebuilder::PreRun(AnalysisContext* context) { UNUSED(context); return true; }
+	bool StaticControlFlowRebuilder::PostRun(AnalysisContext* context) { UNUSED(context); return true; }
+
+	bool StaticControlFlowRebuilder::Run(AnalysisContext* context) {
 		if (!context) 
 			return false;
 		auto loader = context->GetLoader();
@@ -25,8 +28,6 @@ namespace ReWizard {
 		return true;
 	}
 	
-	bool StaticGenericPass::PreRun(AnalysisContext* context) { UNUSED(context); return true; }
-	bool StaticGenericPass::PostRun(AnalysisContext* context) { UNUSED(context); return true; }
 
 	
 }

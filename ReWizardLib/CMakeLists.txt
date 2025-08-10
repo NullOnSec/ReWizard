@@ -1,4 +1,8 @@
-﻿file(GLOB PASS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/source/Analysis/Passes/*.cpp")
+﻿#file(GLOB PASS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/source/Analysis/Passes/*.cpp")
+
+set(PASS_SOURCES 
+    "source/Analysis/Passes/StaticControlFlowRebuilder.cpp"    
+)
 
 add_library(ReWizardLib STATIC
     "source/Disassembler/Disassembler.cpp"

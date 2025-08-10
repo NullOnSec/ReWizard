@@ -1,5 +1,10 @@
 #include <ReWizard/Analysis/PassProvider.h>
-#include <ReWizard/Analysis/Passes/StaticGenericPass.h>
+
+/*
+    All the passes must be included in this TU to ensure 
+    that they are automatically registered
+*/
+#include <ReWizard/Analysis/Passes/StaticControlFlowRebuilder.h>
 
 namespace ReWizard {
 
