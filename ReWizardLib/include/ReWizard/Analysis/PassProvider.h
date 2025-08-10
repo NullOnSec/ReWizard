@@ -31,6 +31,7 @@ namespace ReWizard {
 
     protected:
         static inline bool Registered = []() {
+			//spdlog::info("Registering pass: {}", PassType().Name().data());
             PassRegistry::AddFactory(&PassRegistrar<PassType>::Create);
             return true;
         }();

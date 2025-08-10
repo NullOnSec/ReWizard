@@ -1,5 +1,6 @@
 ﻿#include <iostream>
 
+#include <spdlog/spdlog.h>
 #include <ReWizard/ReWizard.h>
 
 #include <string_view>
@@ -11,6 +12,7 @@ int main() {
     auto manager = ReWizard::AnalysisManager::Create(target.data());
 
     manager->Run();
+	spdlog::info("Analysis completed for target: {}", manager->Name());
 
 	return 0;
 }

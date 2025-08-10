@@ -26,7 +26,7 @@ target_include_directories(ReWizardLib PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include/ReWizard"
 )
 
-target_link_libraries(ReWizardLib PRIVATE LIEF::LIEF Zydis Boost::headers)
+target_link_libraries(ReWizardLib PRIVATE LIEF::LIEF Zydis Boost::headers lief_spdlog)
 
 # Ensure all passes are linked in (WHOLEARCHIVE)
 if (MSVC)

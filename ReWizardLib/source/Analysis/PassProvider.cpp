@@ -1,7 +1,8 @@
+#include <spdlog/spdlog.h>
 #include <ReWizard/Analysis/PassProvider.h>
 
 /*
-    All the passes must be included in this TU to ensure 
+    All the passes must be included in this TU to ensure
     that they are automatically registered
 */
 #include <ReWizard/Analysis/Passes/StaticControlFlowRebuilder.h>
