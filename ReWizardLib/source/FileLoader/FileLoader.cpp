@@ -77,10 +77,10 @@ namespace ReWizard {
         auto hdr = m_target->header();
 
         // Allocate memory for the entire binary
-        m_mappedPtr = (uint8_t*)VirtualAlloc(reinterpret_cast<LPVOID>(base), m_mappedSize, MEM_COMMIT, exec ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE);
+        m_mappedPtr = (uint8_t*)VirtualAlloc(reinterpret_cast<LPVOID>(base), m_mappedSize, MEM_RESERVE | MEM_COMMIT, exec ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE);
         if (!m_mappedPtr) {
             // If allocation at preferred base fails, try to allocate at any address
-            m_mappedPtr = (uint8_t*)VirtualAlloc(0, m_mappedSize, MEM_COMMIT, exec ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE);
+            m_mappedPtr = (uint8_t*)VirtualAlloc(0, m_mappedSize, MEM_RESERVE | MEM_COMMIT, exec ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE);
             if (!m_mappedPtr) {
                 m_status = FileLoaderStatus::AllocationError;
                 return false;

@@ -6,7 +6,7 @@ namespace ReWizard {
     static std::unique_ptr<FileLoader> MakeLoader(const std::string& target);
     static bool LoadBinary(std::unique_ptr<FileLoader>& loader);
     static std::optional<ArchPair> GetArch(const std::unique_ptr<FileLoader>& loader);
-    static Disassembler& GetDisassembler(const ArchPair& arch);
+    static Disassembler& GetDisassemblerRef(const ArchPair& arch);
 
     std::unique_ptr<AnalysisContext> AnalysisContext::Create(const std::string& target) {
         auto loader = MakeLoader(target);
@@ -21,7 +21,7 @@ namespace ReWizard {
         if (!arch.has_value())
             return nullptr;
 
-        auto& disassembler = GetDisassembler(arch.value());
+        auto& disassembler = GetDisassemblerRef(arch.value());
 
         auto ctx = std::unique_ptr<AnalysisContext>(new AnalysisContext(std::move(loader), nullptr, disassembler));
         if (!ctx) return nullptr;
@@ -61,6 +61,6 @@ namespace ReWizard {
     }
 
     bool LoadBinary(std::unique_ptr<FileLoader>& loader) { return loader && loader->Load(); }
-    Disassembler& GetDisassembler(const ArchPair& arch) { return Disassembler::Get(arch.first, arch.second); }
+    Disassembler& GetDisassemblerRef(const ArchPair& arch) { return Disassembler::Get(arch.first, arch.second); }
 
 }

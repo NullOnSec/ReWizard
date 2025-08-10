@@ -53,6 +53,16 @@ namespace ReWizard {
         size_t MappedSize() const { return m_mappedSize; }
         LIEF::Binary* Binary() { return m_target.get(); }
         ArchPair Arch() const { return m_arch; }
+        uintptr_t CurrentImageBase() { return reinterpret_cast<uintptr_t>(m_mappedPtr); }
+
+        bool IsWithinMapping(uint8_t* ptr) {
+            return ptr >= m_mappedPtr && ptr < (m_mappedPtr + m_mappedSize);
+        }
+
+        bool IsWithinMapping(uintptr_t ptr) {
+            auto p = reinterpret_cast<uint8_t*>(ptr);
+            return p >= m_mappedPtr && p < (m_mappedPtr + m_mappedSize);
+        }
 
     private:
         FileLoader(const std::string& name);
@@ -68,13 +78,11 @@ namespace ReWizard {
         std::vector<uint8_t>            m_raw{};
         std::span<uint8_t>              m_mappedSpan{};
         size_t                          m_mappedSize{ 0 };
-        uint8_t* m_mappedPtr{ nullptr };
+        uint8_t*                        m_mappedPtr{ nullptr };
         FileLoaderStatus                m_status = FileLoaderStatus::Success;
         ArchPair                        m_arch{ InvalidArchPair };
     };
 
-    class FileLoaderProvider {
-    };
 }
 
 #endif

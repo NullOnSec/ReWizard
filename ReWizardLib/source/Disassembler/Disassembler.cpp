@@ -106,4 +106,8 @@ namespace ReWizard {
         return Proxy(m_dis, m_mutex);
     }
 
+    Disassembler::Proxy Disassembler::operator->() const {
+        return Proxy(m_dis, m_mutex);
+    }
+
 } // namespace ReWizard

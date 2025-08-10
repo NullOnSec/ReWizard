@@ -24,6 +24,8 @@ namespace ReWizard {
 		const std::string& GetName() const { return m_targetName; }
 		std::set<uintptr_t>& GetVisited() { return m_visited; }
 		const std::set<uintptr_t>& GetVisited() const { return m_visited; }
+		const Disassembler& GetDisassembler() const { return m_disassembler; }
+
 
 	private:
 		AnalysisContext(std::unique_ptr<FileLoader> loader, std::unique_ptr<Module> module, Disassembler& disassembler);

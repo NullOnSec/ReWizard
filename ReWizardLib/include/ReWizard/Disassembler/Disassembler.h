@@ -43,7 +43,8 @@ namespace ReWizard {
         static std::unique_ptr<ExtendedInstruction> Create();
         ~ExtendedInstruction() = default;
 
-        bool IsIndirect() const { return m_isIndirect; }
+        bool& IsIndirect() { return m_isIndirect; }
+        const bool& IsIndirect() const { return m_isIndirect; }
         uintptr_t& IndirectValue() { return m_indirectValue; }
         const uintptr_t IndirectValue() const { return m_indirectValue; }
 
@@ -94,6 +95,7 @@ namespace ReWizard {
         };
 
         Proxy operator->();
+        Proxy operator->() const;
 
         Disassembler(const Disassembler&) = delete;
         Disassembler& operator=(const Disassembler&) = delete;
