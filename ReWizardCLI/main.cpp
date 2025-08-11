@@ -9,6 +9,8 @@ constexpr inline std::string_view target(R"(C:\Users\z\Downloads\Launcher\target
 //constexpr inline std::string_view target(R"(C:\Users\NOYFB\Downloads\exlcus\Launcher_enc\Launcher\target.exe)");
 
 int main() {
+	spdlog::set_level(spdlog::level::debug);
+
     auto manager = ReWizard::AnalysisManager::Create(target.data());
 
     manager->Run();

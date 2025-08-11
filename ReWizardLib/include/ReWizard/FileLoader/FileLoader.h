@@ -55,6 +55,9 @@ namespace ReWizard {
         ArchPair Arch() const { return m_arch; }
         uintptr_t CurrentImageBase() { return reinterpret_cast<uintptr_t>(m_mappedPtr); }
 
+        const std::string& Name() const { return m_targetName; }
+        std::string Name() { return m_targetName; }
+
         bool IsWithinMapping(uint8_t* ptr) {
             return ptr >= m_mappedPtr && ptr < (m_mappedPtr + m_mappedSize);
         }
@@ -74,6 +77,7 @@ namespace ReWizard {
             m_arch = (it != ArchMap.end()) ? it->second : InvalidArchPair;
         }
 
+        std::string                     m_targetName{ "" };
         std::unique_ptr<LIEF::Binary>   m_target{ nullptr };
         std::vector<uint8_t>            m_raw{};
         std::span<uint8_t>              m_mappedSpan{};

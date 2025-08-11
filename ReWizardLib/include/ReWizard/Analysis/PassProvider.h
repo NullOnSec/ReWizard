@@ -8,6 +8,7 @@
 #include <memory>
 #include <map>
 
+#include <spdlog/spdlog.h>
 
 namespace ReWizard {
 
@@ -26,7 +27,9 @@ namespace ReWizard {
     class PassRegistrar : public BaseAnalysisPass {
     public:
         static std::unique_ptr<BaseAnalysisPass> Create() {
-            return std::make_unique<PassType>();
+            auto pass = std::make_unique<PassType>();
+            spdlog::debug("Creating instance of pass {}...", pass->Name());
+            return pass;
         }
 
     private:

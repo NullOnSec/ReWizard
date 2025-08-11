@@ -1,4 +1,3 @@
-#include <spdlog/spdlog.h>
 #include <ReWizard/Analysis/PassProvider.h>
 
 /*
@@ -6,6 +5,8 @@
     that they are automatically registered
 */
 #include <ReWizard/Analysis/Passes/StaticControlFlowRebuilder.h>
+
+#include <spdlog/spdlog.h>
 
 namespace ReWizard {
 
@@ -57,7 +58,7 @@ namespace ReWizard {
 
     template <typename PassType>
     bool PassRegistrar<PassType>::Register() {
-        spdlog::info("Registering pass: {}", PassType().Name().data());
+        spdlog::debug("Registering pass: {}", PassType().Name().data());
         PassRegistry::AddFactory(&PassRegistrar<PassType>::Create);
         return true;
     };

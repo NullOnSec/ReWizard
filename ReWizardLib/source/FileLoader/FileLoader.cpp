@@ -8,6 +8,8 @@
 #include <LIEF/MachO.hpp>
 #include <LIEF/BinaryStream/BinaryStream.hpp>
 
+#include <spdlog/spdlog.h>
+
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -23,10 +25,11 @@ namespace ReWizard {
         return instance;
     }
 
-    FileLoader::FileLoader(const std::string& name) {
+    FileLoader::FileLoader(const std::string& name) : m_targetName(name) {
         std::ifstream file(name, std::ios::binary | std::ios::ate);
         if (!file.is_open()) {
             m_status = FileLoaderStatus::FileOpenError;
+            spdlog::error("Unable to open {} file", name);
             return;
         }
 
@@ -34,6 +37,7 @@ namespace ReWizard {
         file.seekg(0, std::ios::beg);
 
         if (size <= 0) {
+            spdlog::error("File {} is empty!", name);
             m_status = FileLoaderStatus::EmptyFile;
             return;
         }
@@ -44,6 +48,7 @@ namespace ReWizard {
         m_target = LIEF::Parser::parse(m_raw);
         if (!m_target) {
             m_status = FileLoaderStatus::LiefParserError;
+            spdlog::error("LIEF Parser error parsing {}!", name);
             return;
         }
     }
@@ -61,6 +66,7 @@ namespace ReWizard {
 
         if (!size_opt || !header_size_opt) {
             m_status = FileLoaderStatus::InvalidSize;
+            spdlog::error("Target {} size is invalid! ", Name());
             return false;
         }
 
@@ -70,6 +76,7 @@ namespace ReWizard {
         // Validate that we're not trying to allocate absurd amounts of memory
         if (m_mappedSize == 0 || m_mappedSize > (1ULL << 32)) {  // 4GB limit
             m_status = FileLoaderStatus::InvalidSize;
+            spdlog::error("Target {} is too big: {} bytes!", Name(), m_mappedSize);
             return false;
         }
 
@@ -82,6 +89,7 @@ namespace ReWizard {
             // If allocation at preferred base fails, try to allocate at any address
             m_mappedPtr = (uint8_t*)VirtualAlloc(0, m_mappedSize, MEM_RESERVE | MEM_COMMIT, exec ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE);
             if (!m_mappedPtr) {
+                spdlog::error("Unable to allocate {} bytes for target {}", m_mappedSize, Name());
                 m_status = FileLoaderStatus::AllocationError;
                 return false;
             }
@@ -94,6 +102,7 @@ namespace ReWizard {
         // Copy the raw binary data to mapped memory
         if (m_raw.size() <= 0) {
             m_status = FileLoaderStatus::InvalidSize;
+            spdlog::error("Unable to allocate {} bytes for target {}", m_mappedSize, Name());
             return false;
         }
 
@@ -104,6 +113,7 @@ namespace ReWizard {
             VirtualFree(m_mappedPtr, 0, MEM_RELEASE);
             m_mappedPtr = nullptr;
             m_status = FileLoaderStatus::SectionLoaderError;
+            spdlog::error("Fatal error mapping target sections into memory!");
             return false;
         }
 

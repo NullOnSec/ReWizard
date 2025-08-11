@@ -184,18 +184,21 @@ namespace ReWizard {
 
 				if (cat == ZYDIS_CATEGORY_CALL) {
 					HandleCall(context, insn, pc, function, bb);
-				}
-				else if (cat == ZYDIS_CATEGORY_COND_BR || cat == ZYDIS_CATEGORY_UNCOND_BR) {
+				} else if (cat == ZYDIS_CATEGORY_COND_BR || cat == ZYDIS_CATEGORY_UNCOND_BR) {
 					HandleBranch(context, insn, pc, function, bb, work);
 					bb = nullptr;
-					if (cat == ZYDIS_CATEGORY_UNCOND_BR) break;
-				}
-				else if (cat == ZYDIS_CATEGORY_RET) {
+
+					if (cat == ZYDIS_CATEGORY_UNCOND_BR) 
+						break;
+
+				} else if (cat == ZYDIS_CATEGORY_RET) {
 					bb->SetEnd(insn->Address() + insn->Instruction().length);
 					bb->SetLastInsnAddr(insn->Address());
+					
 					function->SetEnd(bb->GetEnd());
 					function->SetLastInsnAddr(bb->GetLastInsnAddr());
 					function->AddBasicBlock(std::move(bb));
+					
 					bb = nullptr;
 					break;
 				}
@@ -221,12 +224,10 @@ namespace ReWizard {
 		if (op0.type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
 			auto target = pc + insn->Instruction().length + op0.imm.value.u;
 			function->AddCallSite(pc, target);
-		}
-		else if (op0.type == ZYDIS_OPERAND_TYPE_MEMORY && op0.mem.base == ZYDIS_REGISTER_RIP) {
+		} else if (op0.type == ZYDIS_OPERAND_TYPE_MEMORY && op0.mem.base == ZYDIS_REGISTER_RIP) {
 			auto ripTarget = pc + insn->Instruction().length + op0.mem.disp.value;
 			function->AddCallSite(pc, ripTarget);
-		}
-		else if (op0.type == ZYDIS_OPERAND_TYPE_MEMORY &&
+		} else if (op0.type == ZYDIS_OPERAND_TYPE_MEMORY &&
 			op0.mem.base == ZYDIS_REGISTER_NONE &&
 			op0.mem.index == ZYDIS_REGISTER_NONE) {
 			auto absTarget = static_cast<uintptr_t>(op0.mem.disp.value);
@@ -253,12 +254,11 @@ namespace ReWizard {
 			} else if (target < imgBase || target >= imgEnd) {
 				spdlog::warn("jmp out of bounds 0x{:016x} at 0x{:016x}", target, insn->Address());
 			}
-		}
-		else if (op0.type == ZYDIS_OPERAND_TYPE_REGISTER || op0.type == ZYDIS_OPERAND_TYPE_MEMORY) {
+		} else if (op0.type == ZYDIS_OPERAND_TYPE_REGISTER || op0.type == ZYDIS_OPERAND_TYPE_MEMORY) {
 			insn->IsIndirect() = true;
 			function->AddCallSite(pc, insn->IndirectValue());
-			bb->SetContainsIndirectJumps(true);
 			function->SetContainsIndirectJumps(true);
+			bb->SetContainsIndirectJumps(true);
 		}
 
 		if (insn->Instruction().meta.category == ZYDIS_CATEGORY_COND_BR)
@@ -266,6 +266,7 @@ namespace ReWizard {
 
 		bb->SetEnd(pc + insn->Instruction().length);
 		bb->SetLastInsnAddr(pc);
+
 		function->SetEnd(bb->GetEnd());
 		function->SetLastInsnAddr(bb->GetLastInsnAddr());
 		function->AddBasicBlock(std::move(bb));
@@ -282,14 +283,15 @@ namespace ReWizard {
 			if (op0.type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
 				target = insn->Address() + insn->Instruction().length + op0.imm.value.u;
 				function->AddCallSite(insn->Address(), target);
-			}
-			else if (op0.type == ZYDIS_OPERAND_TYPE_REGISTER || op0.type == ZYDIS_OPERAND_TYPE_MEMORY) {
+			} else if (op0.type == ZYDIS_OPERAND_TYPE_REGISTER || op0.type == ZYDIS_OPERAND_TYPE_MEMORY) {
 				insn->IsIndirect() = true;
 				bb->SetContainsIndirectJumps(true);
 				function->SetContainsIndirectJumps(true);
 			}
+
 			bb->SetEnd(insn->Address() + insn->Instruction().length);
 			bb->SetLastInsnAddr(insn->Address());
+			
 			function->SetEnd(bb->GetEnd());
 			function->SetLastInsnAddr(bb->GetLastInsnAddr());
 			function->AddBasicBlock(std::move(bb));
@@ -299,6 +301,7 @@ namespace ReWizard {
 				ss << "j__" << std::hex << target;
 				function->SetName(ss.str());
 			}
+			
 			function->SetIsTrampoline(true);
 			return true;
 		}

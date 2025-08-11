@@ -1,6 +1,8 @@
 #include <ReWizard/Analysis/AnalysisManager.h>
 #include <ReWizard/Analysis/AnalysisContext.h>
 
+#include <spdlog/spdlog.h>
+
 namespace ReWizard {
 	AnalysisManager::AnalysisManager(std::unique_ptr<AnalysisContext>& context)
 		: m_context(std::move(context)) {
@@ -13,6 +15,7 @@ namespace ReWizard {
 	std::unique_ptr<AnalysisManager> AnalysisManager::Create(const std::string& target) {
 		auto context = AnalysisContext::Create(target);
 		if (!context) {
+			spdlog::error("Unable to create context!");
 			return nullptr;
 		}
 		return std::unique_ptr<AnalysisManager>(new AnalysisManager(context));

@@ -1,5 +1,7 @@
 #include <ReWizard/Analysis/PassManager.h>
 
+#include <spdlog/spdlog.h>
+
 namespace ReWizard {
 
     void AnalysisPassManager::RunAllAsync(AnalysisContext* ctx) {
@@ -11,7 +13,7 @@ namespace ReWizard {
                 bool ok = false;
                 for (auto& [_, pass] : GetAllPasses()) {
                     if (pass) {
-
+                        spdlog::debug("Running {} ...", pass->Name());
                         if (!(ok = pass->PreRun(ctx))) 
                             break;
 
@@ -34,7 +36,7 @@ namespace ReWizard {
     std::future<bool> AnalysisPassManager::RunAsync(AnalysisContext* ctx, BaseAnalysisPass* pass) {
         std::promise<bool> prom;
         auto fut = prom.get_future();
-
+        spdlog::debug("Running {} ...", pass->Name());
         std::thread(
             [ctx, pass, p = std::move(prom)]() mutable {
                 bool ok = false;
