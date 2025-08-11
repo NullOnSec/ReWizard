@@ -1,6 +1,4 @@
-﻿#file(GLOB PASS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/source/Analysis/Passes/*.cpp")
-
-set(PASS_SOURCES 
+﻿set(PASS_SOURCES 
     "source/Analysis/Passes/StaticControlFlowRebuilder.cpp"    
 )
 
@@ -23,10 +21,10 @@ endif()
 
 target_include_directories(ReWizardLib PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/ReWizard"
+    "${UNICORN_INCLUDE_DIR}"
 )
 
-target_link_libraries(ReWizardLib PRIVATE LIEF::LIEF Zydis Boost::headers lief_spdlog)
+target_link_libraries(ReWizardLib PRIVATE LIEF::LIEF lief_spdlog Zydis Boost::headers unicorn)
 
 # Ensure all passes are linked in (WHOLEARCHIVE)
 if (MSVC)

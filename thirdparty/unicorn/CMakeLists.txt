@@ -14,3 +14,6 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(unicorn)
+
+set(UNICORN_INCLUDE_DIR ${unicorn_SOURCE_DIR}/include CACHE INTERNAL "")
+set(UNICORN_LIB ${unicorn_BINARY_DIR}/src/unicorn_static.lib CACHE INTERNAL "")

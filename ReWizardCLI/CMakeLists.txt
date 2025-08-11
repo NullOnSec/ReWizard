@@ -7,6 +7,7 @@ endif()
 target_include_directories(ReWizardCli PRIVATE 
 	"${CMAKE_CURRENT_SOURCE_DIR}/include"
 	"${CMAKE_SOURCE_DIR}/ReWizardLib/include"
+	"${UNICORN_INCLUDE_DIR}"
 )
 
-target_link_libraries(ReWizardCli PRIVATE LIEF::LIEF Zydis Boost::headers lief_spdlog ReWizardLib)
+target_link_libraries(ReWizardCli PRIVATE LIEF::LIEF Zydis Boost::headers lief_spdlog unicorn ReWizardLib)
