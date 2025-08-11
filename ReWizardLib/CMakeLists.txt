@@ -3,6 +3,7 @@
 )
 
 add_library(ReWizardLib STATIC
+    ${PASS_SOURCES}    
     "source/Disassembler/Disassembler.cpp"
     "source/FileLoader/FileLoader.cpp"
     "source/Analysis/AnalysisContext.cpp"
@@ -12,7 +13,8 @@ add_library(ReWizardLib STATIC
     "source/Analysis/Units/Function.cpp"
     "source/Analysis/Units/Module.cpp"
     "source/Analysis/PassProvider.cpp"
-    ${PASS_SOURCES} # All passes included here
+    "source/Emulator/Emulator.cpp"
+    "source/Emulator/Environment/VirtualMemoryManager.cpp"
 )
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
