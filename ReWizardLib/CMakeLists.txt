@@ -15,7 +15,8 @@ add_library(ReWizardLib STATIC
     "source/Analysis/PassProvider.cpp"
     "source/Emulator/Emulator.cpp"
     "source/Emulator/Environment/VirtualMemoryManager.cpp"
-)
+    "source/Utils/Utils.cpp"
+    )
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET ReWizardLib PROPERTY CXX_STANDARD 20)
