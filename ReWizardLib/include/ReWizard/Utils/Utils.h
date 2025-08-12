@@ -18,9 +18,8 @@ namespace ReWizard {
 
 
 	bool InitializeSymbols(const std::string& cacheDir = "C:\\symbols");
-	std::string AddrToSymbol(uintptr_t addr);
 	bool LoadModuleSymbols(const std::string& modulePath, uintptr_t base, DWORD64 size);
-
+	std::string AddrToSymbol(uintptr_t addr);
 }
 
 #endif
