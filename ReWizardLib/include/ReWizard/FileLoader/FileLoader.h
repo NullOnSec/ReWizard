@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 #include <unordered_map>
+#include <filesystem>
 
 namespace ReWizard {
 
@@ -30,7 +31,6 @@ namespace ReWizard {
         ZydisStackWidth::ZYDIS_STACK_WIDTH_MAX_VALUE
     };
 
-    // Use the correct type for the map key, i.e., uint32_t for LIEF::Header::modes()
     inline std::unordered_map<uint32_t, ArchPair> ArchMap = {
         { LIEF::Header::BITS_64 , { ZydisMachineMode::ZYDIS_MACHINE_MODE_LONG_64,  ZydisStackWidth::ZYDIS_STACK_WIDTH_64  } },
         { LIEF::Header::BITS_32 , { ZydisMachineMode::ZYDIS_MACHINE_MODE_LEGACY_32, ZydisStackWidth::ZYDIS_STACK_WIDTH_32 } },
@@ -58,6 +58,23 @@ namespace ReWizard {
         const std::string& Name() const { return m_targetName; }
         std::string Name() { return m_targetName; }
 
+        // Path getters
+        std::string GetBaseNameA() const {
+            return std::filesystem::path(m_targetName).filename().string();
+        }
+
+        std::wstring GetBaseNameW() const {
+            return std::filesystem::path(m_targetName).filename().wstring();
+        }
+
+        std::string GetFullPathA() const {
+            return std::filesystem::absolute(m_targetName).string();
+        }
+
+        std::wstring GetFullPathW() const {
+            return std::filesystem::absolute(m_targetName).wstring();
+        }
+
         bool IsWithinMapping(uint8_t* ptr) {
             return ptr >= m_mappedPtr && ptr < (m_mappedPtr + m_mappedSize);
         }
@@ -82,7 +99,7 @@ namespace ReWizard {
         std::vector<uint8_t>            m_raw{};
         std::span<uint8_t>              m_mappedSpan{};
         size_t                          m_mappedSize{ 0 };
-        uint8_t*                        m_mappedPtr{ nullptr };
+        uint8_t* m_mappedPtr{ nullptr };
         FileLoaderStatus                m_status = FileLoaderStatus::Success;
         ArchPair                        m_arch{ InvalidArchPair };
     };

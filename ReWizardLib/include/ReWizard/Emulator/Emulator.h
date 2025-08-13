@@ -11,7 +11,7 @@
 namespace ReWizard {
     constexpr uint32_t UC_PROT_READWRITE = UC_PROT_READ | UC_PROT_WRITE;
 
-    using UnicornRegistry = uc_x86_reg;
+    using UnicornRegistry = std::pair<uc_x86_reg, std::string>;
 
     const std::map<ZydisRegister, UnicornRegistry> gRegisterMap = {
         { ZYDIS_REGISTER_NONE, { UC_X86_REG_INVALID,  "none" } },

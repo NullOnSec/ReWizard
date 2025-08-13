@@ -4,10 +4,12 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <map>
+
+#include <unicorn/unicorn.h>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-
 
 
 namespace ReWizard {
@@ -17,34 +19,30 @@ namespace ReWizard {
 #else
 #endif
 
-	const uint64_t DEFAULT_HEAP_SIZE = 32ull * 1024 * 1024; // 32MB Default heap
-	const uint64_t DEFAULT_STACK_SIZE = 8ull * 1024 * 1024; // 8MB Default stack
-	const uint64_t DEFAULT_STACK_ADDR = 0x7000000000ull;
-	const uint64_t DEFAULT_SEGMENT_ADDR = 0x00;
-	const uint64_t MIN_PAGE_SIZE = 0x1000;
 
-	const uint64_t KUSER_SHARED_DATA_ADDR = 0x7FFE0000;
-	const uint64_t KUSER_SHARED_DATA_SIZE = MIN_PAGE_SIZE;
-	inline uint64_t KUSER_ADJACENT_DATA_ADDR = 0x7FFEF000;
-	inline uint64_t KUSER_ADJACENT_DATA_SIZE = MIN_PAGE_SIZE;
-
-	const uint64_t X64_PEB_ADDR = 0x60;
-	const uint64_t X64_TEB_ADDR = 0x30;
 
 	class VirtualRegion {
 	public:
-		enum class Perms : uint8_t {
-			Read = 1 << 0,
-			Write = 1 << 1,
-			Execute = 1 << 2,
-			RW = Read | Write,
-			RWX = Read | Write | Execute
+		enum class Perms : uint32_t {
+			Read = UC_PROT_READ,
+			Write = UC_PROT_WRITE,
+			Execute = UC_PROT_EXEC,
+			RW = Read|Write,
+			RWX = UC_PROT_ALL,
+			PERM_MAX,
 		};
 
 		enum class Type {
 			SystemRegion,
+			DynamicRegion,
 			Module,
+			TYPE_MAX,
 		};
+
+		~VirtualRegion() {
+			if (m_isOwned && m_raw)
+				VirtualFree(m_raw, 0, MEM_RELEASE);
+		}
 
 		static std::unique_ptr<VirtualRegion> Create(uint8_t* ptr, size_t size, Perms perms, Type type) {
 			auto p = std::unique_ptr<VirtualRegion>(new VirtualRegion(size, perms, type, reinterpret_cast<uintptr_t>(ptr), false));
@@ -62,10 +60,12 @@ namespace ReWizard {
 			return p;
 		}
 
-		uintptr_t VirtualAddress() const { return m_virtualAddress; }
-		uintptr_t RealAddress() const { return m_realAddress; }
-		std::span<uint8_t> RawPtr() const { return { m_raw, m_size }; }
-		size_t Size() const { return m_size; }
+		uintptr_t			VirtualAddress() const { return m_virtualAddress; }
+		uintptr_t			RealAddress() const { return m_realAddress; }
+		size_t				Size() const { return m_size; }
+		Perms				GetPerms() const { return m_perms; }
+		Type				GetType() const { return m_type; }
+		std::span<uint8_t>	RawPtr() const { return { m_raw, m_size }; }
 
 	private:
 		VirtualRegion(size_t size, Perms perms, Type type, uintptr_t address, bool owned)
@@ -80,8 +80,7 @@ namespace ReWizard {
 			if (!m_isOwned) {
 				m_raw = reinterpret_cast<uint8_t*>(address);
 				m_realAddress = m_virtualAddress;
-			}
-			else {
+			} else {
 				m_raw = static_cast<uint8_t*>(VirtualAlloc(reinterpret_cast<void*>(address), size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
 				if (!m_raw) {
 					m_raw = static_cast<uint8_t*>(VirtualAlloc(nullptr, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
@@ -91,31 +90,35 @@ namespace ReWizard {
 			}
 		}
 
-		~VirtualRegion() {
-			if (m_isOwned && m_raw)
-				VirtualFree(m_raw, 0, MEM_RELEASE);
-		}
 
+	protected:
 		bool		m_isOwned;
 		uintptr_t	m_virtualAddress;
 		uintptr_t	m_realAddress;
 		size_t		m_size;
 		uint8_t*	m_raw;
-		Perms		m_perms{};
-		Type		m_type{};
+		Perms		m_perms{ Perms::PERM_MAX };
+		Type		m_type{ Type::TYPE_MAX };
 	};
 
+	class Emulator;
 
 	class VirtualMemoryManager {
 	public:
-		VirtualMemoryManager() {}
+		VirtualMemoryManager(Emulator& emulator) : m_emulator(emulator) {}
 
-		bool InitStack(size_t size, uintptr_t address = 0);
-		bool InitHeap(size_t size, uintptr_t address = 0);
-		bool InitSegment(size_t size, uintptr_t address = 0);
+		VirtualRegion* InitStack(size_t size, uintptr_t address = 0);
+		VirtualRegion* InitHeap(size_t size, uintptr_t address = 0);
+		VirtualRegion* InitSegment(size_t size, uintptr_t address = 0);
+
+		VirtualRegion* AllocateModule(uint8_t* buf, size_t size, uintptr_t address = 0, bool owned = false);
+		VirtualRegion* Allocate(size_t size, uintptr_t address = 0, VirtualRegion::Perms perms = VirtualRegion::Perms::RW,  bool owned = false);
+		VirtualRegion* Allocate(uint8_t* buf, size_t size, uintptr_t address = 0, VirtualRegion::Perms perms = VirtualRegion::Perms::RW, bool owned = false);
 
 	private:
-		std::unique_ptr<VirtualRegion> m_stack, m_heap, m_segment;
+		std::unique_ptr<VirtualRegion>						m_stack, m_heap, m_segment;
+		std::map<uintptr_t, std::unique_ptr<VirtualRegion>> m_regions;
+		Emulator&											m_emulator;
 	};
 
 }

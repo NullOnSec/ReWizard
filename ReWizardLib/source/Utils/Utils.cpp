@@ -69,7 +69,7 @@ namespace ReWizard {
 		}
 		return {};
 	}
-	bool LoadModuleSymbols(const std::string& modulePath, uintptr_t base, DWORD64 size) {
+	bool LoadModuleSymbols(const std::string& modulePath, uintptr_t base, uint64_t size) {
 		DWORD64 result = SymLoadModuleEx(
 			GetCurrentProcess(),
 			nullptr,
@@ -82,4 +82,5 @@ namespace ReWizard {
 		);
 		return result != 0;
 	}
+
 }

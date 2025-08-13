@@ -9,7 +9,7 @@ namespace ReWizard {
 
 	class IEnvironment : public Emulator {
 	public:
-		IEnvironment(AnalysisContext* context) : m_context(context) { };
+		IEnvironment(AnalysisContext* context) : m_context(context) {};
 
 		virtual ~IEnvironment() = default;
 
@@ -27,8 +27,7 @@ namespace ReWizard {
 	protected:
 		AnalysisContext* m_context{ nullptr };
 		Status			 m_status{ Status::EnvironmentInitializationFailure };
-	}
-
+	};
 }
 
 #endif
