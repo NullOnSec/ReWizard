@@ -8,7 +8,7 @@
 #include <ReWizard/Analysis/Units/Function.h>
 #include <ReWizard/Analysis/Units/BasicBlock.h>
 
-#include <ReWizard/Types/Win32InternalTypes.hpp>
+//#include <ReWizard/Types/Win32InternalTypes.hpp>
 
 #include <ReWizard/FileLoader/FileLoader.h>
 
