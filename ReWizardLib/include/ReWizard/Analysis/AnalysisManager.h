@@ -22,7 +22,7 @@ namespace ReWizard {
 		AnalysisContext* Context() { return m_context.get(); }
 		const AnalysisContext* Context() const { return m_context.get(); }
 
-		void Run() { m_passManager.RunAllAsync(m_context.get()); }
+		void Run() { m_passManager.ExecAll(m_context.get()); }
 
 	private:
 		std::unique_ptr<AnalysisContext>	m_context;

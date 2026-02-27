@@ -21,8 +21,8 @@ namespace ReWizard {
             PassProvider::AddPass(p);
         }
 
-        void RunAllAsync(AnalysisContext* ctx);
-        std::future<bool> RunAsync(AnalysisContext* ctx, BaseAnalysisPass* pass);
+        bool ExecAll(AnalysisContext* ctx);
+        bool ExecPass(AnalysisContext* ctx, BaseAnalysisPass* pass);
 
         BaseAnalysisPass* GetPassByName(const std::string& name) {
             auto p = PassProvider::Get(name);

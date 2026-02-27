@@ -4,52 +4,47 @@
 
 namespace ReWizard {
 
-    void AnalysisPassManager::RunAllAsync(AnalysisContext* ctx) {
-        std::promise<bool> prom;
-        std::future<bool> fut = prom.get_future();
+    bool AnalysisPassManager::ExecAll(AnalysisContext* ctx) {
+        if (!ctx) {
+            return false;
+        }
 
-        std::thread _(
-            [this, ctx, p = std::move(prom)] () mutable {
-                bool ok = false;
-                for (auto& [_, pass] : GetAllPasses()) {
-                    if (pass) {
-                        spdlog::debug("Running {} ...", pass->Name());
-                        if (!(ok = pass->PreRun(ctx))) 
-                            break;
-
-                        if (!(ok = pass->Run(ctx))) 
-                            break;
-
-                        if (!(ok = pass->PostRun(ctx))) 
-                            break;
-
-                    }
-                }
-                p.set_value(ok);
+        for (auto& [_, pass] : GetAllPasses()) {
+            if (!pass) {
+                return false;
             }
-        );
 
-        _.detach();
-        fut.wait();
+            spdlog::debug("Running {} ...", pass->Name());
+
+            if (!ExecPass(ctx, pass.get())) {
+                spdlog::error("Error executing {}", pass->Name());
+                return false;
+            }
+
+        }
+
+        return true;
     }
 
-    std::future<bool> AnalysisPassManager::RunAsync(AnalysisContext* ctx, BaseAnalysisPass* pass) {
-        std::promise<bool> prom;
-        auto fut = prom.get_future();
-        spdlog::debug("Running {} ...", pass->Name());
-        std::thread(
-            [ctx, pass, p = std::move(prom)]() mutable {
-                bool ok = false;
-                if (pass) {
-                    ok = pass->PreRun(ctx);
-                    if (ok) ok = pass->Run(ctx);
-                    if (ok) ok = pass->PostRun(ctx);
-                }
-                p.set_value(ok);
-            }
-        ).detach();
+    bool AnalysisPassManager::ExecPass(AnalysisContext* ctx, BaseAnalysisPass* pass) {
+        if (!ctx || !pass) {
+            return false;
+        }
 
-        return fut;
+        if (!pass->PreRun(ctx)) {
+            return false;
+        }
+        
+        if (!pass->Run(ctx)) {
+            return false;
+        }
+
+        if (!pass->PostRun(ctx)) {
+            return false;
+        }
+
+        return true;
     }
+
 
 }
