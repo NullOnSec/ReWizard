@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 
 namespace ReWizard {
+
 	AnalysisManager::AnalysisManager(std::unique_ptr<AnalysisContext> context)
 		: m_context(std::move(context)) { }
 
