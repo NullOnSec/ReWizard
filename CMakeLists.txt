@@ -6,7 +6,7 @@ if(NOT BOOST_INSTALL)
 endif()
 
 # Make sure CMake can find BoostConfig.cmake
-list(PREPEND CMAKE_PREFIX_PATH "${BOOST_INSTALL}/lib/cmake/Boost-1.85.0")
+list(PREPEND CMAKE_PREFIX_PATH "${BOOST_INSTALL}/lib64/cmake/Boost-1.85.0")
 
 project("ReWizard")
 

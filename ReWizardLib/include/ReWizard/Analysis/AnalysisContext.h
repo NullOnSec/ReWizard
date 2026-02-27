@@ -29,7 +29,6 @@ namespace ReWizard {
 
 	private:
 		AnalysisContext(std::unique_ptr<FileLoader> loader, std::unique_ptr<Module> module, Disassembler& disassembler);
-		AnalysisContext(std::unique_ptr<FileLoader>& loader, std::unique_ptr<Module>& module, Disassembler& disassembler);
 
 	private:
 		std::unique_ptr<FileLoader> m_loader;

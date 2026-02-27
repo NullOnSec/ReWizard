@@ -4,13 +4,8 @@
 #include <spdlog/spdlog.h>
 
 namespace ReWizard {
-	AnalysisManager::AnalysisManager(std::unique_ptr<AnalysisContext>& context)
-		: m_context(std::move(context)) {
-	}
-
-	AnalysisManager::AnalysisManager(const std::unique_ptr<AnalysisContext>& context)
-		: m_context(std::move(const_cast<std::unique_ptr<AnalysisContext>&>(context))) {
-	}
+	AnalysisManager::AnalysisManager(std::unique_ptr<AnalysisContext> context)
+		: m_context(std::move(context)) { }
 
 	std::unique_ptr<AnalysisManager> AnalysisManager::Create(const std::string& target) {
 		auto context = AnalysisContext::Create(target);
@@ -18,7 +13,7 @@ namespace ReWizard {
 			spdlog::error("Unable to create context!");
 			return nullptr;
 		}
-		return std::unique_ptr<AnalysisManager>(new AnalysisManager(context));
+		return std::unique_ptr<AnalysisManager>(new AnalysisManager(std::move(context)));
 	}
 
 	FileLoader* AnalysisManager::Loader() { return m_context->GetLoader(); }

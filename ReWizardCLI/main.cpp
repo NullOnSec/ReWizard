@@ -16,8 +16,10 @@ int main() {
 
     auto manager = ReWizard::AnalysisManager::Create(target.data());
 
-    manager->Run();
-	spdlog::info("Analysis completed for target: {}", manager->Name());
+	if (manager) {
+		manager->Run();
+		spdlog::info("Analysis completed for target: {}", manager->Name());
+	}
 
 	return 0;
 }

@@ -47,10 +47,6 @@ namespace ReWizard {
         return std::move(ctx);
     }
 
-	AnalysisContext::AnalysisContext(std::unique_ptr<FileLoader>& loader, std::unique_ptr<Module>& module, Disassembler& disassembler)
-		: m_loader(std::move(loader)), m_module(std::move(module)), m_targetName(), m_disassembler(disassembler) {
-	}
-
 	AnalysisContext::AnalysisContext(std::unique_ptr<FileLoader> loader, std::unique_ptr<Module> module, Disassembler& disassembler)
 		: m_loader(std::move(loader)), m_module(std::move(module)), m_targetName(), m_disassembler(disassembler) {
 	}
@@ -58,7 +54,6 @@ namespace ReWizard {
     std::unique_ptr<FileLoader> MakeLoader(const std::string& target) {
         auto loader = FileLoader::Create(target);
         if (!loader || loader->Status() != FileLoaderStatus::Success) {
-            
             return nullptr;
         }
         return loader;

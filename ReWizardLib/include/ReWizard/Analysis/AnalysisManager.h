@@ -29,8 +29,7 @@ namespace ReWizard {
 		AnalysisPassManager					m_passManager;
 
 	private:
-		AnalysisManager(const std::unique_ptr<AnalysisContext>& context);
-		AnalysisManager(std::unique_ptr<AnalysisContext>& context);
+		AnalysisManager(std::unique_ptr<AnalysisContext> context);
 	};
 
 }

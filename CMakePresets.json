@@ -25,19 +25,19 @@
                 "value": "x64",
                 "strategy": "external"
             },
-            "cacheVariables": {
-              "CMAKE_BUILD_TYPE": "Debug",
-              "BOOST_INSTALL": "C:/boost/x64/debug"
-            }
+          "cacheVariables": {
+            "CMAKE_BUILD_TYPE": "Debug",
+            "BOOST_INSTALL": "C:/local/boost_1_85_0"
+          }
         },
         {
             "name": "x64-release",
             "displayName": "x64 Release",
             "inherits": "x64-debug",
-            "cacheVariables": {
-              "CMAKE_BUILD_TYPE": "Release",
-              "BOOST_INSTALL": "C:/boost/x64/release"
-            }
+          "cacheVariables": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "BOOST_INSTALL": "C:/local/boost_1_85_0"
+          }
         }
     ]
 }
