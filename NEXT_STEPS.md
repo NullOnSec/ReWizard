@@ -12,8 +12,8 @@ Updated: 2026-05-15
 
 **Phase 2 — Improved Static Analysis (IN PROGRESS):**
 - ✅ 2.1 Recursive Descent Disassembly — entrypoint + exports + IAT targets, call following, linear sweep fallback
+- ✅ 2.2 Data Flow Analysis — register tracking (mov/lea/xor), indirect call/jump resolution via known register values
 - ✅ 2.4 Output Generation — AnalysisResult with JSON/DOT/text export, CLI --output/--format flags
-- ⏳ 2.2 Data Flow Analysis — NOT STARTED
 - ⏳ 2.3 Abstract Interpretation — NOT STARTED
 
 **Phase 3 — Hybrid Analysis with PANDAS:**
@@ -27,34 +27,35 @@ Updated: 2026-05-15
 
 ## Recommended Next Steps (in priority order)
 
-### 1. Phase 2.2 — DataFlowAnalysisPass
-- Track register definitions and uses within basic blocks
-- Maintain a map of register -> value/origin for each BB
-- Resolve indirect calls through register tracking (e.g., `call rax` where `rax` was loaded from a known address)
-- Mark resolved indirect calls with their targets when possible
-- Register as GenericPass, auto-register via PassRegistrar
-
-### 2. Phase 2.3 — AbstractInterpretationPass  
-- Implement interval/domain analysis for register values
-- Replace the current `>30% stack ops` heuristic for marking functions for hybrid analysis
+### 1. Phase 2.3 — AbstractInterpretationPass
+- Implement interval/domain analysis for register values within basic blocks
+- Replace the current `>30% stack ops` heuristic in StaticControlFlowRebuilder
 - Detect opaque predicates (always-true / always-false branches)
-- Update StaticControlFlowRebuilder to consume abstract interpretation results
+- Mark functions accordingly instead of the vague stack-op heuristic
+- Register as GenericPass
 
-### 3. Phase 3.1 — PANDAS Integration Layer
+### 2. Phase 3.1 — PANDAS Integration Layer
 - Add PANDAS as a git submodule or FetchContent dependency
 - Create `Hybrid/PANDASRunner.h|.cpp` wrapper for replay recordings
 - Document the trace recording workflow
 
-### 4. Phase 3.3 — HybridAnalysisPass
+### 3. Phase 3.3 — HybridAnalysisPass
 - Consume PANDAS trace data
 - Resolve indirect calls/jumps from runtime observations
 - Mark functions as "hybrid-verified"
+- Remove opaque predicate markers from trace-proven functions
+
+### 4. Phase 4 — Deobfuscation Passes
+- OpaquePredicatePass: remove dead branches using abstract interpretation results
+- DeobfuscationFlattenPass: pattern-match control-flow flattening dispatchers
+- DeadCodeEliminationPass: remove unreachable basic blocks
+- ConstantFoldingPass: evaluate constant expressions
 
 ## Files Recently Modified
 
-- `ReWizardLib/source/Analysis/Passes/StaticControlFlowRebuilder.cpp` (recursive descent)
-- `ReWizardLib/source/Analysis/AnalysisResult.cpp` (output serialization)
-- `ReWizardCLI/main.cpp` (CLI flags)
+- `ReWizardLib/source/Analysis/Passes/DataFlowAnalysisPass.cpp` (new)
+- `ReWizardLib/include/ReWizard/Analysis/Passes/DataFlowAnalysisPass.h` (new)
+- `ReWizardLib/source/Analysis/PassProvider.cpp` (registration)
 - `tests/fixtures/test_hello.exe` (new test fixture)
 
 ## Build Reminders
