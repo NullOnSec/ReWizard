@@ -2,6 +2,7 @@
 
 #ifdef REWIZARD_LLVM_ENABLED
 #include <llvm/IR/Module.h>
+#include <llvm/IR/Verifier.h>
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Analysis/LoopAnalysisManager.h>
 #include <llvm/Analysis/CGSCCPassManager.h>
@@ -11,6 +12,7 @@
 #include <llvm/Transforms/Scalar/SimplifyCFG.h>
 #include <llvm/Transforms/InstCombine/InstCombine.h>
 #include <llvm/Transforms/Scalar/ADCE.h>
+#include <llvm/Transforms/IPO/GlobalDCE.h>
 #include <llvm/Support/raw_ostream.h>
 #endif
 
@@ -32,6 +34,15 @@ namespace ReWizard {
         }
 
         spdlog::debug("LLVMOptimizer: running optimization level {}", static_cast<int>(level));
+
+        std::string verifyErr;
+        llvm::raw_string_ostream verifyErrOS(verifyErr);
+        if (llvm::verifyModule(*module, &verifyErrOS)) {
+            verifyErrOS.flush();
+            spdlog::warn("LLVMOptimizer: module verification FAILED before optimization: {}", verifyErr);
+        } else {
+            spdlog::debug("LLVMOptimizer: module verification passed before optimization");
+        }
 
         if (dumpBefore) {
             std::error_code ec;
@@ -59,22 +70,26 @@ namespace ReWizard {
         llvm::ModulePassManager MPM;
 
         if (level != Level::O0) {
-            // Build a minimal deobfuscation pipeline explicitly.
-            // The full buildPerModuleDefaultPipeline(O2) crashes on modules
-            // with thousands of tiny orphan functions (no callers, no entry point).
-            //
-            // Bisection results (crash = 0xc0000005):
-            //   PASS: Empty FPM, DCEPass, SCCPPass
-            //   FAIL: SimplifyCFGPass, InstCombinePass
-            // Safe pipeline: SCCP -> DCE to fold constants and remove dead code.
             llvm::FunctionPassManager FPM;
             FPM.addPass(llvm::SCCPPass());
             FPM.addPass(llvm::DCEPass());
+            FPM.addPass(llvm::SimplifyCFGPass());
+            FPM.addPass(llvm::InstCombinePass());
             MPM.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(FPM)));
+            MPM.addPass(llvm::GlobalDCEPass());
         }
 
         auto result = MPM.run(*module, MAM);
         (void)result;
+
+        verifyErr.clear();
+        llvm::raw_string_ostream verifyErrOS2(verifyErr);
+        if (llvm::verifyModule(*module, &verifyErrOS2)) {
+            verifyErrOS2.flush();
+            spdlog::warn("LLVMOptimizer: module verification FAILED after optimization: {}", verifyErr);
+        } else {
+            spdlog::debug("LLVMOptimizer: module verification passed after optimization");
+        }
 
         spdlog::debug("LLVMOptimizer: optimization complete");
         return true;

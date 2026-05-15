@@ -144,7 +144,7 @@ namespace ReWizard {
         funcNameStream << "bb_" << std::hex << opts.baseAddress;
         std::string funcName = funcNameStream.str();
         auto* funcTy = llvm::FunctionType::get(voidTy, false);
-        auto* func = llvm::Function::Create(funcTy, llvm::Function::ExternalLinkage, funcName, mod);
+        auto* func = llvm::Function::Create(funcTy, llvm::Function::InternalLinkage, funcName, mod);
         auto* entry = llvm::BasicBlock::Create(ctx, "entry", func);
         llvm::IRBuilder<> builder(entry);
 
