@@ -1,6 +1,6 @@
 # ReWizard
 
-Binary analysis framework for x86/x86_64 reverse engineering, built on a pass-based architecture. Designed for multi-architecture future support via VEX IR.
+Binary analysis framework for x86/x86_64 reverse engineering, built on a pass-based architecture. Uses LLVM IR for deobfuscation and code emission, remill for binary lifting.
 
 ## Architecture
 
@@ -26,23 +26,22 @@ AnalysisManager
 
 ### IR Layer (Phase 4+)
 
-Deobfuscation uses a **split IR architecture**:
+Deobfuscation uses **LLVM IR** as the single intermediate representation. Remill (Trail of Bits) lifts x86 binary bytes → LLVM IR. LLVM's optimization passes handle constant folding, dead code elimination, and CFG simplification. The X86 backend emits correct machine code for binary patching.
 
-**VEX IR for analysis** — lifting raw bytes to IR for understanding semantics, detecting dead code, constant propagation, CFF pattern matching. VEX is the analysis IR: it makes all side-effects explicit, is architecture-independent, and angr maintains it.
-
-**LLVM MC for code emission** — when deobfuscation needs to patch the binary (e.g., rewriting a flattened function), LLVM MC lowers the transformed code back to correct x86/x86_64 bytes. VEX has no code generation backend, so LLVM MC fills this role.
-
-This split means we don't need the full LLVM toolchain — only the MC (Machine Code) layer and X86 target description. No Clang, no optimizer pipeline, no linker. Built with `-DLLVM_TARGETS_TO_BUILD=X86`, the resulting binary size is ~30-80MB, acceptable for a reversing suite.
+**One IR, one toolchain:**
 
 ```
-Binary bytes ──(VEX)──► IRSB (analysis) ──(transform)──► Modified IRSB
-                                                            │
-                                      ┌─────────────────────┘
-                                      ▼
-                            Lower to LLVM MC ──(emit)──► Patched bytes
+Binary bytes ──(remill)──► LLVM IR ──(LLVM opts / custom passes)──► Optimized LLVM IR ──(X86 backend)──► Patched bytes
 ```
 
-For analysis-only passes (constant folding detection, dead code identification, opaque predicate reasoning), VEX IR is sufficient and no code emission is needed. Only CFF unflattening and binary patching require the LLVM MC lowering path.
+- **remill** lifts x86/x86_64 binary instructions to LLVM IR — makes all side-effects explicit (register writes, memory stores, condition flags)
+- **LLVM optimizer passes** provide battle-tested constant propagation (SCCP), dead code elimination (DCE), CFG simplification, and global value numbering (GVN)
+- **Custom ReWizard passes** operate on LLVM IR for CFF unflattening, opaque predicate simplification, and deobfuscation-specific transformations
+- **LLVM X86 backend** emits correct machine code — handles x86 encoding complexity (prefixes, ModRM, VEX/EVEX, REX.W) so we don't have to
+
+**We use existing lifters, not our own.** remill is maintained by Trail of Bits, used in production (McSema2), and supports x86, AMD64, AArch64.
+
+**LLVM is integrated minimally.** Built with `-DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_ENABLE_PROJECTS=""`. No Clang, no linker, no frontend. ~2-3GB built, ~30-80MB linked binary size. Acceptable for a reversing suite.
 
 ### Current Passes
 
@@ -76,15 +75,14 @@ HybridAnalysisPass ← ITraceReader ← IEmulator
 |----------|-----------------------|------------------------------------------|
 | Zydis    | v4.1.0                | x86/x86_64 instruction decode & format   |
 | LIEF     | extended_build_patch  | PE/ELF/MachO binary parsing              |
+| LLVM     | v19+ (X86 target only) | IR analysis, optimization passes, X86 code emission |
+| remill   | (Trail of Bits)       | Binary lifter: x86/x86_64 bytes → LLVM IR |
 | Unicorn  | v2.1.0 (x86 only)     | CPU micro-execution (optional accelerator) |
-| Bochs    | (TBD)                 | Full-system emulation (primary backend)   |
-| VEX IR   | angr/pyvex (C core)  | Analysis IR: lifting bytes → IR for deobfuscation |
-| LLVM MC  | v19+ (X86 target only) | Code emission: lowering transformed IR → x86 bytes for binary patching |
 | Bochs    | (TBD)                 | Full-system emulation (primary backend)   |
 | Boost    | 1.85.0                | Graph (adjacency_list, GraphViz output)   |
 | spdlog   | (via LIEF)            | Logging                                  |
 
-**Dependency policy:** No custom lifters — only use readily available, maintained libraries. VEX IR handles lifting and analysis. LLVM MC handles code emission (binary patching). LLVM is integrated minimally: only the MC layer and X86 target, built with `-DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_ENABLE_PROJECTS=""`. No Clang, no optimizer pipeline, no linker. Resulting binary size ~30-80MB, acceptable for a reversing suite.
+**Dependency policy:** No custom lifters or code emitters — only use readily available, maintained libraries. remill provides the lifter. LLVM provides the optimizer and code emitter. ~2-3GB built is acceptable for a full reversing suite.
 
 ## Build
 
@@ -136,7 +134,8 @@ ReWizard targets an IDA Pro-like interactive analysis experience. The architectu
 |-----------------------------|-------------|
 | **Static Analysis**         | Recursive descent disassembly, data flow, abstract interpretation |
 | **Hybrid Analysis**         | Bochs full-system emulation with snapshot support; Unicorn optional micro-execution |
-| **Deobfuscation**           | VEX IR-based transformations: constant folding, dead code elimination, CFF flattening recovery |
+| **Deobfuscation**           | LLVM IR-based transformations: constant folding, dead code elimination, CFF flattening recovery |
+| **Binary Patching**         | remill lifts x86→LLVM IR, LLVM X86 backend emits optimized code, patch binary in-place |
 | **Cross-Platform**          | Windows first, Linux second, macOS if possible |
-| **Multi-Architecture**      | VEX IR enables architecture-independent analysis passes (x86 now, ARM/MIPS future) |
+| **Multi-Architecture**      | LLVM + remill enable architecture-independent analysis (x86 now, ARM future) |
 | **Interactive Analysis**    | IDA Pro-like UI with analysis database, xrefs, type system, and graph visualization |

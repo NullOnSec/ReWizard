@@ -157,16 +157,20 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 ---
 
-## Phase 4 — Deobfuscation (IR-Based)
+## Phase 4 — Deobfuscation (LLVM IR-Based)
 
-**Goal:** Use VEX IR for analysis and LLVM MC for code emission. VEX lifts x86 → IR for understanding semantics, detecting dead code, constant propagation, and CFF pattern matching. LLVM MC lowers transformed code back to x86 bytes for binary patching. This split avoids pulling in the entire LLVM toolchain — only the MC layer and X86 target are needed.
+**Goal:** Use LLVM IR as the single intermediate representation for deobfuscation. remill (Trail of Bits) lifts x86 binary bytes → LLVM IR. LLVM's optimizer passes provide constant folding (SCCP), dead code elimination (DCE), CFG simplification, and global value numbering (GVN). The X86 backend emits correct machine code for binary patching. One IR, one toolchain.
 
-### 4.0 VEX IR Integration
-- Add angr's `libvex` (from pyvex C core) as a CMake FetchContent dependency.
-- Create `IR/VEXLifter.h|.cpp` — wraps `libvex` to lift raw bytes at address → `IRSB` (IR Super Block).
-- Integrate with `BasicBlock` — each BB holds an optional `IRSB` for its lifted IR.
-- Create `IR/IRBlock.h` — C++ wrapper around VEX IR types (IRStmt, IRExpr, IRType) for cleaner pass code.
-- Test: lift known x86 byte sequences, verify IR output.
+### 4.0 LLVM & remill Integration
+- Add LLVM as a CMake FetchContent dependency with minimal configuration:
+  - `-DLLVM_TARGETS_TO_BUILD=X86` (only x86/AMD64 target)
+  - `-DLLVM_ENABLE_PROJECTS=""` (no Clang, no extra tools)
+  - `-DLLVM_BUILD_TOOLS=OFF`, `-DLLVM_BUILD_EXAMPLES=OFF`, `-DLLVM_BUILD_TESTS=OFF`
+- Add remill as a CMake FetchContent dependency (Trail of Bits, BSD-2-Clause-ish).
+- Create `IR/Lifter.h|.cpp` — wraps remill to lift raw bytes at address → `llvm::Function` (LLVM IR).
+- Create `IR/IRBlock.h` — C++ wrapper around LLVM IR types for ReWizard pass code (Value, Instruction, BasicBlock, Function).
+- Integrate with `BasicBlock`: each BB holds an optional `llvm::BasicBlock*` for its lifted IR.
+- Test: lift known x86 byte sequences (nop, mov, add, jmp) and verify LLVM IR output.
 
 ### 4.1 Opaque Predicate Elimination ✅
 - `OpaquePredicatePass` (GenericPass).
@@ -175,51 +179,37 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 ### 4.2 Control Flow Flattening Recovery
 - `DeobfuscationFlattenPass` (GenericPass).
-- Lift flattened basic blocks to VEX IR.
-- Pattern-match dispatcher state variables in VEX IR (WrTmp of state variable → Switch-like Exit structure).
+- Lift flattened basic blocks to LLVM IR.
+- Pattern-match dispatcher state variables in LLVM IR (phi nodes with state variable → switch-like structure).
 - Reconstruct original control flow from IR-level analysis.
 - Write recovered CFG back to `BasicBlock`/`Function` structure.
-- For binary patching: lower reconstructed blocks through LLVM MC emitter.
+- For binary patching: lower reconstructed blocks through LLVM X86 backend → encoded bytes.
 
 ### 4.3 Dead Code Elimination
 - `DeadCodeEliminationPass` (GenericPass).
-- Operates on VEX IR: identify WrTmp/Put assignments that are never read (dead temporaries).
+- Operates on LLVM IR: use LLVM's built-in DCE and AggressiveDCE passes.
 - Removes unreachable basic blocks (confirmed by abstract interpretation or hybrid trace).
 - Removes dead stores (Store to address that is never read before next Store or function exit).
-- Analysis only — no LLVM MC emission needed for dead code elimination within basic blocks.
+- Can also operate on ReWizard's `BasicBlock`/`Function` structure for passes that don't need IR.
 
 ### 4.4 Constant Folding & Simplification
 - `ConstantFoldingPass` (GenericPass).
-- Operates on VEX IR: evaluate constant arithmetic operations at analysis time.
-- Simplify arithmetic identities (e.g., `xor rax, rax` → WrTmp(t0) = 0:I64).
-- Propagate constants through VEX temporaries (constantargh-style propagation).
-- This is sound because VEX makes all side-effects explicit.
-- For binary patching: lower simplified blocks through LLVM MC emitter.
+- Operates on LLVM IR: use LLVM's built-in SCCP (Sparse Conditional Constant Propagation) pass.
+- Simplify arithmetic identities (e.g., `xor rax, rax` → 0 in LLVM IR).
+- Propagate constants through LLVM IR (SCCP handles this automatically).
+- For binary patching: lower simplified blocks through LLVM X86 backend → encoded bytes.
 
-### 4.5 LLVM MC Integration (Code Emission)
-- Add LLVM as a CMake FetchContent dependency with minimal configuration:
-  - `-DLLVM_TARGETS_TO_BUILD=X86` (only x86/AMD64 target)
-  - `-DLLVM_ENABLE_PROJECTS=""` (no Clang, no extra tools)
-  - `-DLLVM_BUILD_TOOLS=OFF` (don't build llvm-as, llvm-dis, etc.)
-  - `-DLLVM_BUILD_EXAMPLES=OFF`
-  - `-DLLVM_BUILD_TESTS=OFF`
-- Create `Emission/MCEmitter.h|.cpp` — wraps LLVM MC layer to emit x86 bytes from IR-level descriptions.
-- `MCEmitter` takes instruction mnemonic + operands → encoded bytes.
+### 4.5 Binary Patching & Code Emission
+- Create `Emission/MCEmitter.h|.cpp` — wraps LLVM MC layer to emit x86 bytes from LLVM IR functions.
 - Create `Emission/Patcher.h|.cpp` — writes encoded bytes back into the loaded binary at specified offsets.
-- Test: emit known instructions (nop, mov reg/reg, jmp rel32) and verify byte output.
-
-### 4.6 IR → Native Writeback
-- After IR-level transformations, write simplified code back to the binary.
-- Process: VEX IRSB → analyze/transform → lower to instruction descriptions → LLVM MC emit → Patcher writes bytes.
-- Handle relocation fixups: when emitted code is shorter than original, pad with NOPs; when longer, use detour/trampoline.
+- Handle code size differences: when emitted code is shorter than original, pad with NOPs; when longer, use detour/trampoline.
 - Optional: produce a patched binary file or in-place modification.
-- This enables CFF-unflattened output, constant-folded output, etc.
+- Test: emit known instructions and verify byte output matches expected encodings.
 
-### 4.7 Tests
+### 4.6 Tests
 - Craft obfuscated test binaries (opaque predicates, flattened CFG).
-- Verify each deobfuscation pass produces the expected simplified VEX IR.
+- Verify each deobfuscation pass produces expected simplified LLVM IR.
 - Test constant folding on known arithmetic identities.
-- Test LLVM MC emission: verify emitted bytes match known x86 encodings.
 - Test full round-trip: lift → transform → emit → verify binary runs correctly.
 
 ---
@@ -305,8 +295,8 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 ## Dependency Notes
 
-- **VEX IR** (from angr/pyvex) is the chosen intermediate representation for analysis passes. BSD-2-Clause license. C library compiles with MSVC. Supports x86, AMD64, ARM, ARM64, MIPS, PPC. No custom lifters — we use angr's maintained `libvex` directly.
-- **LLVM MC** (v19+, X86 target only) is the code emission backend for binary patching. Only the MC layer and X86 target description are needed — no Clang, no optimizer pipeline, no linker. Built with `-DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_ENABLE_PROJECTS=""`. Resulting binary size ~30-80MB. Apache-2.0 license with LLVM exceptions.
+- **LLVM** (v19+, X86 target only) is the single IR for deobfuscation and code emission. Only the MC layer and X86 target are linked — no Clang, no optimizer pipeline, no linker. Built with `-DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_ENABLE_PROJECTS=""`. Apache-2.0 license with LLVM exceptions. ~2-3GB built, ~30-80MB linked binary.
+- **remill** (Trail of Bits) lifts x86/x86_64 binary bytes → LLVM IR. Production-grade, maintained, used by McSema2. BSD-2-Clause-ish license.
 - **Bochs** will be integrated as a FetchContent dependency or linked as a prebuilt library (LGPL v2.1). Required for Phase 3 hybrid analysis.
 - **Unicorn** remains linked in `ReWizardLib` for Phase 3.6 optional micro-execution accelerator.
 - **Dear ImGui** will be integrated for Phase 6 interactive UI. Cross-platform (Windows/Linux/macOS), minimal dependencies, immediate-mode GUI suitable for custom analysis views.
@@ -323,10 +313,11 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 | Bochs primary backend | Full-system emulation — no API stubs needed, works on all host platforms. Snapshot mitigates boot time. |
 | Unicorn optional accelerator | Lightweight micro-execution for simple arithmetic predicates. Not the foundation — correctness from Bochs. |
 | No PANDAS | Linux-only host, cannot run on Windows. Cross-platform is a hard requirement. |
-| VEX IR for analysis, LLVM MC for emission | VEX lifts x86→IR for analysis (no backend). LLVM MC lowers transformed code→x86 bytes for binary patching. Split architecture avoids pulling in the entire LLVM toolchain. |
-| Minimal LLVM integration | Only LLVM MC layer + X86 target. No Clang, no optimizer, no linker. `-DLLVM_TARGETS_TO_BUILD=X86`. ~30-80MB binary size is acceptable for a reversing suite. |
-| No custom lifters | We must use readily available, maintained lifters — not write our own. VEX/pyvex provides this. |
-| No custom code emitters | LLVM MC is the production-grade x86 encoder. Writing our own would be incorrect (x86 encoding is notoriously complex). |
+| VEX IR removed | VEX has no code generation backend. Cannot round-trip for binary patching. Using two IRs (VEX + LLVM) adds unnecessary complexity. |
+| LLVM IR for deobfuscation and code emission | One IR, one toolchain. remill lifts x86→LLVM IR, LLVM optimizer passes handle constant folding/DCE/CFG simplification, X86 backend emits code. Battle-tested and production-grade. |
+| remill as binary lifter | Maintained by Trail of Bits, used in McSema2, BSD-2-Clause-ish. No custom lifters — we use existing, maintained tools. |
+| Minimal LLVM integration | Only X86 target + MC layer. No Clang, no optimizer pipeline (beyond what we use), no linker. `-DLLVM_TARGETS_TO_BUILD=X86`. ~30-80MB binary size acceptable for a reversing suite. |
+| No custom x86 encoder | LLVM MC handles x86 encoding correctly (prefixes, ModRM, VEX/EVEX, REX.W). Writing our own would be a bug source. |
 | Analysis database (SQLite) | Persistent storage of all analysis results and user annotations. Enables incremental re-analysis, session save/restore, and headless mode. SQLite is portable, serverless, and queryable. |
 | Dear ImGui for UI | Cross-platform, minimal dependencies, immediate-mode GUI. Suitable for custom disassembly/graph/hex views. Allows fast iteration on UI without build-time overhead. |
 | IDA Pro-like interaction model | Analysis database is source of truth. UI is a view onto the database. User annotations (renames, comments, types) survive re-analysis. Xrefs are bidirectional and queryable. |

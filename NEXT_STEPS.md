@@ -12,15 +12,15 @@ Updated: 2026-05-15
 - **No Python scripts** — everything embedded in C++. No "record on Linux / analyze on Windows" workflow.
 - **Bochs snapshot strategy** — boot once, save CPU+memory state, restore for each analysis session
 
-### IR: VEX IR for Analysis, LLVM MC for Code Emission
+### IR: LLVM IR (remill + LLVM optimizer + X86 backend)
 
-- **VEX IR** lifts x86 → IR for analysis (constant folding detection, dead code identification, CFF pattern matching)
-- **LLVM MC** lowers transformed code → x86 bytes for binary patching (CFF unflattening, constant folding writeback)
-- VEX has **no code generation backend** — it can lift but cannot emit native code
-- LLVM MC is the only production-grade x86 encoder that compiles on MSVC and handles x86 encoding correctly
-- We integrate LLVM minimally: only the MC layer + X86 target, built with `-DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_ENABLE_PROJECTS=""`
-- No Clang, no optimizer pipeline, no linker. Resulting binary size ~30-80MB — acceptable for a reversing suite
-- Alternative considered: writing our own x86 encoder. Rejected — x86 encoding is notoriously complex (prefixes, ModRM, VEX/EVEX, REX.W, etc.), LLVM MC already handles this correctly
+- **Single IR, single toolchain** — LLVM IR for everything: lifting, analysis, optimization, code emission
+- **remill** (Trail of Bits) lifts x86/x86_64 binary bytes → LLVM IR. Production-grade, maintained, used in McSema2.
+- **LLVM optimizer passes** provide battle-tested constant propagation (SCCP), dead code elimination (DCE/ADCE), CFG simplification, and global value numbering (GVN) — exactly what deobfuscation needs
+- **LLVM X86 backend** emits correct machine code for binary patching — handles x86 encoding complexity (prefixes, ModRM, VEX/EVEX, REX.W) so we don't have to write our own encoder
+- **VEX IR rejected** — no code generation backend, can't round-trip for binary patching. Using two IRs adds unnecessary complexity.
+- **Custom encoders rejected** — x86 encoding is notoriously complex, LLVM MC handles it correctly
+- LLVM integrated minimally: `-DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_ENABLE_PROJECTS=""`. No Clang, no linker, no frontend. ~2-3GB built, ~30-80MB linked.
 
 ### Bochs Rationale
 
@@ -83,21 +83,14 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
 
 ## Recommended Next Steps (in priority order)
 
-### 1. VEX IR Integration (Prerequisite for Phase 4 Deobfuscation)
-- Add angr's `libvex` (from pyvex C core) as CMake FetchContent dependency
-- Create `IR/VEXLifter.h|.cpp` — wraps `libvex` to lift raw bytes at address → `IRSB`
-- Create `IR/IRBlock.h` — C++ wrapper around VEX IR types (IRStmt, IRExpr, IRType)
-- Integrate with `BasicBlock`: each BB holds optional `IRBlock` for its lifted IR
-- Test: lift known x86 byte sequences (nop, mov, add, jmp) and verify IRSB output
-
-### 2. LLVM MC Integration (Prerequisite for Binary Patching)
-- Add LLVM as CMake FetchContent dependency with minimal configuration:
-  - `-DLLVM_TARGETS_TO_BUILD=X86` (only x86/AMD64 target)
-  - `-DLLVM_ENABLE_PROJECTS=""` (no Clang, no extra tools)
-  - `-DLLVM_BUILD_TOOLS=OFF`, `-DLLVM_BUILD_EXAMPLES=OFF`, `-DLLVM_BUILD_TESTS=OFF`
-- Create `Emission/MCEmitter.h|.cpp` — wraps LLVM MC layer to emit x86 bytes from instruction descriptions
-- Create `Emission/Patcher.h|.cpp` — writes encoded bytes back into the loaded binary at specified offsets
-- Test: emit known instructions (nop, mov reg/reg, jmp rel32) and verify byte output
+### 1. LLVM & remill Integration (Prerequisite for Phase 4 Deobfuscation)
+- Add LLVM as CMake FetchContent dependency (minimal: X86 target only, no Clang)
+  - `-DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_ENABLE_PROJECTS="" -DLLVM_BUILD_TOOLS=OFF`
+- Add remill as CMake FetchContent dependency (Trail of Bits binary lifter)
+- Create `IR/Lifter.h|.cpp` — wraps remill to lift raw bytes at address → `llvm::Function`
+- Create `IR/IRBlock.h` — C++ wrapper around LLVM IR types for ReWizard pass code
+- Integrate with `BasicBlock`: each BB holds optional `llvm::BasicBlock*` for its lifted IR
+- Test: lift known x86 byte sequences (nop, mov, add, jmp) and verify LLVM IR output
 
 ### 2. Bochs Integration Architecture
 - Design `IEmulator` / `ITraceProducer` interface
@@ -109,24 +102,23 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
   - Yield `TraceRecord`s compatible with existing `HybridAnalysisPass`
 - Snapshot format: CPU state + memory regions + device state
 
-### 3. ConstantFoldingPass (VEX IR-based)
-- Lift basic blocks to VEX IR
-- Evaluate constant arithmetic operations (Add32, Sub32, etc. with constant operands)
-- Propagate constants through temporaries
-- Simplify identities (xor tmp, tmp → 0; sub tmp, tmp → 0; and tmp, 0xFFFF → zero-extend)
-- For binary patching: lower simplified blocks through LLVM MC emitter
+### 3. ConstantFoldingPass (LLVM IR-based)
+- Lift basic blocks to LLVM IR via remill
+- Use LLVM's built-in SCCP (Sparse Conditional Constant Propagation) pass
+- Simplify arithmetic identities (xor rax, rax → 0, sub rax, rax → 0, etc.)
+- For binary patching: lower simplified blocks through LLVM X86 backend
 
-### 4. DeadCodeEliminationPass (VEX IR-based)
-- Identify WrTmp/Put assignments that are never read (dead temporaries)
+### 4. DeadCodeEliminationPass (LLVM IR-based)
+- Use LLVM's built-in DCE and AggressiveDCE passes
 - Remove unreachable basic blocks
 - Remove dead Store operations
-- Analysis only — no LLVM MC emission needed for basic dead code elimination
+- Can also operate on ReWizard's BasicBlock/Function structure for non-IR passes
 
-### 5. DeobfuscationFlattenPass (VEX IR-based)
-- Pattern-match dispatcher state variable in VEX IR
+### 5. DeobfuscationFlattenPass (LLVM IR-based)
+- Pattern-match dispatcher state variable in LLVM IR (phi nodes with state variable)
 - Reconstruct original control flow from flattened switch-like state machines
 - Write recovered CFG back to BasicBlock/Function structure
-- For binary patching: lower reconstructed blocks through LLVM MC emitter
+- For binary patching: lower reconstructed blocks through LLVM X86 backend
 
 ### 6. UnicornExecutor (Optional Accelerator)
 - Encapsulate binspektor prototype as `UnicornExecutor` implementing `IEmulator`
