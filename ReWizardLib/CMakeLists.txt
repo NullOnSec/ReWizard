@@ -3,6 +3,7 @@
     "source/Analysis/Passes/ImportAnalysisPass.cpp"
     "source/Analysis/Passes/DataFlowAnalysisPass.cpp"
     "source/Analysis/Passes/AbstractInterpretationPass.cpp"
+    "source/Analysis/Passes/HybridAnalysisPass.cpp"
 )
 
 add_library(ReWizardLib STATIC
@@ -17,6 +18,7 @@ add_library(ReWizardLib STATIC
     "source/Analysis/Units/SymbolTable.cpp"
     "source/Analysis/PassProvider.cpp"
     "source/Analysis/AnalysisResult.cpp"
+    "source/Hybrid/SimpleTraceReader.cpp"
     ${PASS_SOURCES} # All passes included here
 )
 

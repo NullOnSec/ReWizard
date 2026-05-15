@@ -26,6 +26,9 @@ namespace ReWizard {
 		const std::set<uintptr_t>& GetVisited() const { return m_visited; }
 		const Disassembler& GetDisassembler() const { return m_disassembler; }
 
+		void SetTracePath(const std::string& path) { m_tracePath = path; }
+		const std::string& GetTracePath() const { return m_tracePath; }
+
 
 	private:
 		AnalysisContext(std::unique_ptr<FileLoader> loader, std::unique_ptr<Module> module, Disassembler& disassembler);
@@ -37,6 +40,7 @@ namespace ReWizard {
 		std::string m_targetName;
 		Disassembler& m_disassembler;
 		std::set<uintptr_t> m_visited;
+		std::string m_tracePath;
 	};
 }
 

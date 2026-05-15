@@ -12,6 +12,7 @@ void PrintUsage(const char* program) {
               << "  --verbose    Enable verbose (debug) logging\n"
               << "  --output     Output file path (default: stdout)\n"
               << "  --format     Output format: json, dot, text (default: text)\n"
+              << "  --trace      Path to hybrid analysis trace file (JSON)\n"
               << "  --help       Show this help message\n";
 }
 
@@ -30,6 +31,7 @@ int main(int argc, char* argv[]) {
 
     std::string outputPath;
     std::string format = "text";
+    std::string tracePath;
 
     for (int i = 2; i < argc; ++i) {
         std::string arg(argv[i]);
@@ -52,6 +54,13 @@ int main(int argc, char* argv[]) {
                 std::cerr << "Error: --format requires a format argument (json, dot, text)\n";
                 return 1;
             }
+        } else if (arg == "--trace" || arg == "-t") {
+            if (i + 1 < argc) {
+                tracePath = argv[++i];
+            } else {
+                std::cerr << "Error: --trace requires a path argument\n";
+                return 1;
+            }
         }
     }
 
@@ -59,6 +68,10 @@ int main(int argc, char* argv[]) {
     if (!manager) {
         spdlog::error("Failed to create analysis manager for: {}", target);
         return 1;
+    }
+
+    if (!tracePath.empty()) {
+        manager->Context()->SetTracePath(tracePath);
     }
 
     manager->Run();

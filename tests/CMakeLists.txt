@@ -4,6 +4,7 @@ add_executable(ReWizardTests
     test_symbol_table.cpp
     test_import_analysis.cpp
     test_cfg.cpp
+    test_hybrid_analysis.cpp
 )
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)

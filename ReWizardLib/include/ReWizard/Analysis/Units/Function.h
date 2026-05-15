@@ -136,6 +136,14 @@ namespace ReWizard {
 			markedForHybridAnalysis_ = true;
 		}
 
+		bool IsHybridVerified() const {
+			return hybridVerified_;
+		}
+
+		void SetHybridVerified(bool val) {
+			hybridVerified_ = val;
+		}
+
 		bool HasOpaquePredicates() const {
 			return hasOpaquePredicates_;
 		}
@@ -186,6 +194,7 @@ namespace ReWizard {
 		bool containsIndirectCalls_{ false }, containsIndirectJumps_{ false };
 		bool markedForHybridAnalysis_ = false;
 		bool hasOpaquePredicates_ = false;
+		bool hybridVerified_ = false;
 		bool disassemblyCached_ = false;
 		bool isTrampoline_ = false;
 		std::set<uintptr_t> opaquePredicateAddresses_;
