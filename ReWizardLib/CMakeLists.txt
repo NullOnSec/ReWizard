@@ -1,6 +1,7 @@
 ﻿set(PASS_SOURCES 
     "source/Analysis/Passes/StaticControlFlowRebuilder.cpp"
     "source/Analysis/Passes/ImportAnalysisPass.cpp"
+    "source/Analysis/Passes/DataFlowAnalysisPass.cpp"
 )
 
 add_library(ReWizardLib STATIC
