@@ -97,6 +97,28 @@ Requires MSVC + Ninja. Boost must be at `C:/boost/x64/{debug,release}` or overri
 9. **WHOLEARCHIVE CMake** — the per-pass `/WHOLEARCHIVE` logic uses incomplete object paths.
 10. ~~**No test infrastructure**~~ — Google Test framework present, 31 tests passing.
 
+### Project Database & Interactive UI (Phase 6)
+
+ReWizard targets an IDA Pro-like interactive analysis experience. The architecture separates the **analysis database** (model) from the **UI** (view), enabling headless/scripting use alongside the GUI.
+
+**Analysis Database** — persistent storage of all analysis results and user annotations:
+- Functions (boundaries, types, calling conventions), BasicBlocks (CFG edges), Instructions (decoded bytes, operands)
+- Cross-references (xrefs): call refs, data refs, jump refs — bidirectional
+- Symbol annotations: renames, comments, type information
+- Deobfuscation results: simplified IR, recovered control flow
+- Hybrid trace data: execution records, resolved indirect targets
+- Incremental: re-analysis only updates changed portions, doesn't rebuild from scratch
+- Format: SQLite or custom binary format, loadable without re-running the full pipeline
+
+**Interactive UI** — IDA Pro-inspired multi-panel layout:
+- Disassembly view: instructions with symbol resolution, xref highlights, inline comments
+- Graph view: Boost.Graph-derived CFG visualization with interactive navigation
+- Hex view: raw bytes with decoded instruction overlay
+- Function list: searchable/filterable function table with signature preview
+- Cross-reference panel: jump-to-definition, jump-to-xref, call graph navigation
+- Type viewer: struct/enum/typedef definitions with member layout
+- Console/scripting: command-driven re-analysis, pass control, scripting API
+
 ## Project Goals
 
 | Goal                        | Description |
@@ -106,3 +128,4 @@ Requires MSVC + Ninja. Boost must be at `C:/boost/x64/{debug,release}` or overri
 | **Deobfuscation**           | VEX IR-based transformations: constant folding, dead code elimination, CFF flattening recovery |
 | **Cross-Platform**          | Windows first, Linux second, macOS if possible |
 | **Multi-Architecture**      | VEX IR enables architecture-independent analysis passes (x86 now, ARM/MIPS future) |
+| **Interactive Analysis**    | IDA Pro-like UI with analysis database, xrefs, type system, and graph visualization |

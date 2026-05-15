@@ -224,15 +224,63 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 - Batch instruction decoding instead of single-instruction calls.
 - Parallel function disassembly where data permits.
 
-### 5.4 Interactive CLI / TUI
-- Add a terminal UI (e.g., imTUI or similar) for:
-  - Viewing functions list.
-  - Navigating disassembly with cross-references.
-  - Triggering re-analysis on demand.
+---
 
-### 5.5 Plugin System
-- Expose a C API or plugin interface for custom passes.
-- Allow loading external analysis passes as shared libraries.
+## Phase 6 — Analysis Database & Interactive UI
+
+**Goal:** Persistent analysis sessions with an IDA Pro-like interactive experience. The database stores all analysis results and user annotations, enabling incremental re-analysis and sharing. The UI provides multi-view navigation of the binary.
+
+### 6.1 Analysis Database Core
+- Design `AnalysisDatabase` class: persistent storage for all analysis artifacts.
+- Schema design: functions (address, size, name, type, convention), basic blocks (start, end, successors, predecessors), instructions (address, bytes, mnemonic, operands), symbols (address, name, type, source), cross-references (from, to, type: call/data/jump).
+- Storage backend: SQLite (portable, queryable, no server process needed).
+- Incremental save: database updated on each pass completion, not rebuilt from scratch.
+- Headless mode: all analysis runs without UI, database is the single source of truth.
+
+### 6.2 Cross-Reference (Xref) System
+- Build bidirectional xref map from analysis results: call xrefs (function calls), data xrefs (memory reads/writes), jump xrefs (branch targets).
+- `XrefManager` — stores from→to and to→from mappings for O(1) lookup.
+- Populate from: ImportAnalysisPass (IAT entries), StaticControlFlowRebuilder (call/jump targets), DataFlowAnalysisPass (resolved indirects), HybridAnalysisPass (trace-verified targets).
+- Expose via database queries: "who calls this function?", "what reads this address?".
+
+### 6.3 Symbol & Annotation Persistence
+- `SymbolManager` — user-defined names, typed variables, function signatures, comments.
+- Rename symbols: override auto-generated names (sub_401000 → main).
+- Function type annotations: specify calling convention, return type, parameter types.
+- Inline comments: attach user notes to any address.
+- Type system: structs, enums, typedefs with member layout and size information.
+- All annotations stored in database, survive re-analysis passes.
+
+### 6.4 Interactive Disassembly View
+- Dear ImGui-based GUI (cross-platform: Windows, Linux, macOS via GLFW/GL3W or SDL).
+- Disassembly panel: scrollable instruction list with address, bytes, mnemonic, operands.
+- Symbol resolution: show names instead of raw addresses where available.
+- Inline xref counts: `[Xrefs: 3]` annotations on call/jump targets.
+- User interaction: double-click to follow address, right-click for context menu (rename, comment, xrefs).
+- Color coding: highlighted registers, immediate constants, branch conditions.
+
+### 6.5 Graph & Hex Views
+- Graph view: Boost.Graph-derived CFG visualization with interactive node/edge navigation.
+  - Zoom, pan, minimap overview.
+  - Click node to focus, double-click to enter function, Escape to return.
+  - Highlight: current path, loop back-edges, opaque predicate branches (dead edges dimmed).
+  - Sync selection with disassembly view (click in graph → scroll to address in disasm).
+- Hex view: raw bytes with decoded instruction overlay.
+  - Column-aligned hex dump with ASCII representation.
+  - Highlight modified bytes (relocations, deobfuscation patches).
+  - Select bytes → show decoded instruction in status bar.
+
+### 6.6 Function List & Search
+- Searchable/filterable function table: name, address, size, type, # xrefs.
+- Global search: search by address, symbol name, string constant, byte pattern.
+- Bookmarks: save/restore navigation positions.
+- Cross-reference panel: show all callers (call xrefs) and callees for selected function.
+
+### 6.7 Console & Scripting API
+- Command console: type commands to trigger passes, navigate, query database.
+- Scripting API: expose `AnalysisContext`, `Module`, `Function`, `BasicBlock`, `SymbolManager`, `XrefManager` to a scripting language (Lua or Python via embedded interpreter).
+- Batch mode: run analysis headlessly, export results to database, then open in GUI.
+- Plugin system: load custom analysis passes as shared libraries via `.dll`/`.so`.
 
 ---
 
@@ -241,6 +289,8 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 - **VEX IR** (from angr/pyvex) is the chosen intermediate representation for deobfuscation passes. BSD-2-Clause license. C library compiles with MSVC. Supports x86, AMD64, ARM, ARM64, MIPS, PPC. No custom lifters — we use angr's maintained `libvex` directly.
 - **Bochs** will be integrated as a FetchContent dependency or linked as a prebuilt library (LGPL v2.1). Required for Phase 3 hybrid analysis.
 - **Unicorn** remains linked in `ReWizardLib` for Phase 3.6 optional micro-execution accelerator.
+- **Dear ImGui** will be integrated for Phase 6 interactive UI. Cross-platform (Windows/Linux/macOS), minimal dependencies, immediate-mode GUI suitable for custom analysis views.
+- **SQLite** will be integrated for Phase 6 analysis database. Portable, serverless, queryable, zero-configuration.
 - **Google Test** added via FetchContent for the test framework.
 - All dependencies must be downloaded to `Z:` (not `C:`) per project policy.
 - **PANDAS** is explicitly **not used** — Linux-only host, cannot run on Windows.
@@ -256,6 +306,9 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 | VEX IR for deobfuscation | Architecture-independent, maintained by angr, BSD-2-Clause, compiles with MSVC. Enables sound constant folding, dead code elimination, and CFF recovery on IR instead of raw x86. Multi-arch future-proof. |
 | No LLVM IR | LLVM is too large/heavyweight for our needs. VEX is lighter, purpose-built for binary analysis, and already supports the architectures we need. |
 | No custom lifters | We must use readily available, maintained lifters — not write our own. VEX/pyvex provides this. |
+| Analysis database (SQLite) | Persistent storage of all analysis results and user annotations. Enables incremental re-analysis, session save/restore, and headless mode. SQLite is portable, serverless, and queryable. |
+| Dear ImGui for UI | Cross-platform, minimal dependencies, immediate-mode GUI. Suitable for custom disassembly/graph/hex views. Allows fast iteration on UI without build-time overhead. |
+| IDA Pro-like interaction model | Analysis database is source of truth. UI is a view onto the database. User annotations (renames, comments, types) survive re-analysis. Xrefs are bidirectional and queryable. |
 | Boost.Graph for CFG | Already in use, well-tested, provides GraphViz output out of the box |
 | Zydis for disassembly | Best-in-class x86 decoder, v4 supports all modern ISA extensions |
 | Static auto-registration | Passes self-register via `PassRegistrar<T>` — no manual registry needed, just include the header |

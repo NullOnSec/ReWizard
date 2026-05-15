@@ -122,6 +122,47 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
 - Only for simple micro-execution (arithmetic predicates, short code regions)
 - Falls back to Bochs for unhandled cases (future)
 
+## Backlog: Phase 6 — Analysis Database & Interactive UI
+
+IDA Pro-like interactive analysis experience. Database is the single source of truth; UI is a view onto it.
+
+### 6.1 Analysis Database Core (SQLite)
+- `AnalysisDatabase` class: persistent storage for functions, BBs, instructions, symbols, xrefs, annotations
+- SQLite backend: portable, serverless, queryable
+- Incremental save: updated per-pass, not rebuilt from scratch
+- Headless mode: analysis runs without UI, database is truth
+
+### 6.2 Cross-Reference (Xref) System
+- `XrefManager`: bidirectional from→to and to→from maps (call, data, jump xrefs)
+- Populated from ImportAnalysisPass, StaticControlFlowRebuilder, DataFlowAnalysisPass, HybridAnalysisPass
+- O(1) lookup: "who calls this?", "what reads this address?"
+
+### 6.3 Symbol & Annotation Persistence
+- `SymbolManager`: user renames, function types, calling conventions, inline comments
+- Type system: structs, enums, typedefs with member layout
+- All annotations stored in database, survive re-analysis
+
+### 6.4 Interactive Disassembly View
+- Dear ImGui-based GUI (cross-platform: Windows/Linux/macOS)
+- Disassembly panel: address bytes mnemonic operands with symbol resolution
+- Inline xref counts, color coding, right-click context menus
+- Double-click follow address, rename, add comment
+
+### 6.5 Graph & Hex Views
+- Graph view: CFG visualization with zoom, pan, minimap, function entry/exit highlighting
+- Hex view: raw bytes with decoded instruction overlay, relocation highlighting
+- Synced selection: click in graph → scroll in disasm, and vice versa
+
+### 6.6 Function List & Search
+- Searchable/filterable function table
+- Global search: address, symbol name, string constant, byte pattern
+- Bookmarks: save/restore navigation positions
+
+### 6.7 Console & Scripting API
+- Command console: trigger passes, navigate, query database
+- Scripting API: expose analysis objects to Lua or embedded Python
+- Plugin system: load custom analysis passes as shared libraries
+
 ## Key Files Recently Modified
 
 - `ReWizardLib/include/ReWizard/Analysis/Passes/BasePass.hpp` (added Dependencies())
