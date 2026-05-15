@@ -107,6 +107,12 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
 
 **Phase 6 — UI/Database:** Not started
 
+## Target Priority
+
+**x64 PE > x86 PE > Linux ELF > Mach-O**
+
+All test fixtures, primary development, and optimization effort target x64 PE first. x86 PE is supported secondarily. Linux ELF and Mach-O are tertiary/last priorities and are explicitly deferred until x64/x86 PE are fully functional.
+
 ## Recommended Next Steps (in priority order)
 
 ### 1. Expand Lifter Instruction Coverage

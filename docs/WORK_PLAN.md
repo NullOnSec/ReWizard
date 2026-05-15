@@ -219,6 +219,7 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 **Goal:** Polish, performance, and advanced capabilities.
 
 ### 5.1 Multi-Architecture Support
+- **Target priority:** x64 PE > x86 PE > Linux ELF > Mach-O. All test fixtures and primary development focus on x64 PE.
 - VEX IR already supports ARM, MIPS, PPC in addition to x86.
 - Add `FileLoader` format detection for ELF and MachO.
 - Add ELF/MachO-specific passes (`ELFImportAnalysisPass`, etc.).

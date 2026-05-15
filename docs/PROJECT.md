@@ -137,6 +137,6 @@ ReWizard targets an IDA Pro-like interactive analysis experience. The architectu
 | **Hybrid Analysis**         | Bochs full-system emulation with snapshot support; Unicorn optional micro-execution |
 | **Deobfuscation**           | LLVM IR-based transformations: constant folding, dead code elimination, CFF flattening recovery |
 | **Binary Patching**         | remill lifts x86→LLVM IR, LLVM X86 backend emits optimized code, patch binary in-place |
-| **Cross-Platform**          | Windows first, Linux second, macOS if possible |
-| **Multi-Architecture**      | LLVM + remill enable architecture-independent analysis (x86 now, ARM future) |
+| **Cross-Platform**          | Windows first (x64 PE primary, x86 PE secondary), Linux third (ELF), macOS last (Mach-O) |
+| **Multi-Architecture**      | x64 PE is the primary target; x86 PE secondary. Linux ELF and Mach-O deferred. ARM future via LLVM + remill |
 | **Interactive Analysis**    | IDA Pro-like UI with analysis database, xrefs, type system, and graph visualization |
