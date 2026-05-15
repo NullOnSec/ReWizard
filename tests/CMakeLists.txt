@@ -6,6 +6,7 @@ add_executable(ReWizardTests
     test_cfg.cpp
     test_hybrid_analysis.cpp
     test_opaque_predicate.cpp
+    test_ir_lifter.cpp
 )
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)

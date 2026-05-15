@@ -2,6 +2,7 @@
 #define UNITS_BASIC_BLOCK_H
 
 #include <ReWizard/Disassembler/Disassembler.h>
+#include <ReWizard/IR/IRBlock.h>
 
 #include <memory>
 #include <cstdint>
@@ -82,7 +83,12 @@ namespace ReWizard {
 
 		std::vector<uintptr_t>& GetPredecessors() {
 			return predecessors_;
-		}		
+		}
+
+		// LLVM IR representation (optional, populated by IR lifting pass)
+		bool HasIRBlock() const { return irBlock_ != nullptr; }
+		IRBlock* GetIRBlock() const { return irBlock_.get(); }
+		void SetIRBlock(std::unique_ptr<IRBlock> ir) { irBlock_ = std::move(ir); }
 
 	private:
 		BasicBlock(Function* func, const std::string& name, uintptr_t start)
@@ -102,6 +108,7 @@ namespace ReWizard {
 
 		std::vector<uintptr_t> successors_; // addresses of successor blocks
 		std::vector<uintptr_t> predecessors_; // addresses of predecessor blocks
+		std::unique_ptr<IRBlock> irBlock_; // optional LLVM IR representation
 	};
 
 }
