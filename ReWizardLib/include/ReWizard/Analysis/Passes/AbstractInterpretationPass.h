@@ -88,10 +88,11 @@ namespace ReWizard {
 
         ~AbstractInterpretationPass() = default;
 
-        bool PreRun(AnalysisContext* context) override;
-        bool Run(AnalysisContext* context) override;
-        bool PostRun(AnalysisContext* context) override;
-        std::string_view Name() const override { return "AbstractInterpretationPass"; }
+		bool PreRun(AnalysisContext* context) override;
+		bool Run(AnalysisContext* context) override;
+		bool PostRun(AnalysisContext* context) override;
+		std::string_view Name() const override { return "AbstractInterpretationPass"; }
+		std::vector<std::string_view> Dependencies() const override { return { "StaticControlFlowRebuilder" }; }
 
         static PredicateResult EvaluateBranch(ExtendedInstruction* branchInsn, ExtendedInstruction* prevInsn, const IntervalDomain& domain);
 

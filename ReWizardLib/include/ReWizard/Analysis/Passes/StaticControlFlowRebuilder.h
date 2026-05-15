@@ -20,10 +20,11 @@ namespace ReWizard {
 
         ~StaticControlFlowRebuilder() = default;
 
-        bool PreRun(AnalysisContext* context) override;
-        bool Run(AnalysisContext* context) override;
-        bool PostRun(AnalysisContext* context) override;
-        std::string_view Name() const override { return "StaticControlFlowRebuilder"; }
+		bool PreRun(AnalysisContext* context) override;
+		bool Run(AnalysisContext* context) override;
+		bool PostRun(AnalysisContext* context) override;
+		std::string_view Name() const override { return "StaticControlFlowRebuilder"; }
+		std::vector<std::string_view> Dependencies() const override { return { "ImportAnalysisPass" }; }
 
         void ReAnalyzeFrom(AnalysisContext* context, uintptr_t address);
 

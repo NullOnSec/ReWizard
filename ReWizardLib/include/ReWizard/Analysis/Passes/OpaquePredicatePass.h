@@ -14,10 +14,11 @@ namespace ReWizard {
 
         ~OpaquePredicatePass() = default;
 
-        bool PreRun(AnalysisContext* context) override;
-        bool Run(AnalysisContext* context) override;
-        bool PostRun(AnalysisContext* context) override;
-        std::string_view Name() const override { return "OpaquePredicatePass"; }
+		bool PreRun(AnalysisContext* context) override;
+		bool Run(AnalysisContext* context) override;
+		bool PostRun(AnalysisContext* context) override;
+		std::string_view Name() const override { return "OpaquePredicatePass"; }
+		std::vector<std::string_view> Dependencies() const override { return { "AbstractInterpretationPass" }; }
     };
 }
 

@@ -28,10 +28,11 @@ namespace ReWizard {
 
         ~DataFlowAnalysisPass() = default;
 
-        bool PreRun(AnalysisContext* context) override;
-        bool Run(AnalysisContext* context) override;
-        bool PostRun(AnalysisContext* context) override;
-        std::string_view Name() const override { return "DataFlowAnalysisPass"; }
+		bool PreRun(AnalysisContext* context) override;
+		bool Run(AnalysisContext* context) override;
+		bool PostRun(AnalysisContext* context) override;
+		std::string_view Name() const override { return "DataFlowAnalysisPass"; }
+		std::vector<std::string_view> Dependencies() const override { return { "StaticControlFlowRebuilder" }; }
 
     private:
         void AnalyzeFunction(Function* function, AnalysisContext* context);

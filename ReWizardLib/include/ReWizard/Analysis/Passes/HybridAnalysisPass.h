@@ -20,10 +20,13 @@ namespace ReWizard {
 
         ~HybridAnalysisPass() = default;
 
-        bool PreRun(AnalysisContext* context) override;
-        bool Run(AnalysisContext* context) override;
-        bool PostRun(AnalysisContext* context) override;
-        std::string_view Name() const override { return "HybridAnalysisPass"; }
+		bool PreRun(AnalysisContext* context) override;
+		bool Run(AnalysisContext* context) override;
+		bool PostRun(AnalysisContext* context) override;
+		std::string_view Name() const override { return "HybridAnalysisPass"; }
+		std::vector<std::string_view> Dependencies() const override {
+			return { "StaticControlFlowRebuilder", "AbstractInterpretationPass", "OpaquePredicatePass" };
+		}
 
         void SetTraceReader(std::unique_ptr<ITraceReader> reader);
 

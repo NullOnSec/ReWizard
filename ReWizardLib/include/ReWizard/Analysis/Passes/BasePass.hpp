@@ -2,6 +2,8 @@
 #define BASE_PASS_H
 
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace ReWizard {
 	class AnalysisContext;
@@ -22,6 +24,7 @@ namespace ReWizard {
 		virtual bool Run(AnalysisContext* context) = 0;
 		virtual bool PostRun(AnalysisContext* context) = 0;
 		virtual std::string_view Name() const = 0;
+		virtual std::vector<std::string_view> Dependencies() const { return {}; }
 
 		Type GetType() { return m_type; }
 		

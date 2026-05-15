@@ -2,6 +2,8 @@
 #define ANALYSIS_PASS_MANAGER_H
 
 #include <ReWizard/Analysis/PassProvider.h>
+#include <vector>
+#include <memory>
 
 namespace ReWizard {
 
@@ -26,6 +28,8 @@ namespace ReWizard {
             return PassProvider::GetAll();
         }
 
+    private:
+        std::vector<BaseAnalysisPass*> TopologicalSort();
     };
 
 }
