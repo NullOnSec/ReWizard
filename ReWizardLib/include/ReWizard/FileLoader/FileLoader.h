@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 #include <unordered_map>
+#include <utility>
 
 namespace ReWizard {
 
@@ -66,6 +67,8 @@ namespace ReWizard {
             auto p = reinterpret_cast<uint8_t*>(ptr);
             return p >= m_mappedPtr && p < (m_mappedPtr + m_mappedSize);
         }
+
+        std::vector<std::pair<uintptr_t, uintptr_t>> GetExecutableSections() const;
 
     private:
         FileLoader(const std::string& name);

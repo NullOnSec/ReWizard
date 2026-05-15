@@ -4,7 +4,9 @@
 #include <stdexcept>
 
 #include <LIEF/PE.hpp>
+#include <LIEF/PE/Section.hpp>
 #include <LIEF/ELF.hpp>
+#include <LIEF/ELF/Section.hpp>
 #include <LIEF/MachO.hpp>
 #include <LIEF/BinaryStream/BinaryStream.hpp>
 
@@ -222,6 +224,36 @@ namespace ReWizard {
                 }
             }
         }
+    }
+
+    std::vector<std::pair<uintptr_t, uintptr_t>> FileLoader::GetExecutableSections() const {
+        std::vector<std::pair<uintptr_t, uintptr_t>> result;
+        if (!m_target || !m_mappedPtr)
+            return result;
+
+        auto base = reinterpret_cast<uintptr_t>(m_mappedPtr);
+        if (auto pe = dynamic_cast<LIEF::PE::Binary*>(m_target.get())) {
+            for (const auto& section : pe->sections()) {
+                if ((section.characteristics() & 0x20000000) != 0) { // IMAGE_SCN_MEM_EXECUTE
+                    uintptr_t start = base + section.virtual_address();
+                    uintptr_t end = start + section.virtual_size();
+                    if (end > start && end <= base + m_mappedSize) {
+                        result.emplace_back(start, end);
+                    }
+                }
+            }
+        } else if (auto elf = dynamic_cast<LIEF::ELF::Binary*>(m_target.get())) {
+            for (const auto& section : elf->sections()) {
+                if (section.flags() & 0x4) { // SHF_EXECINSTR
+                    uintptr_t start = base + section.virtual_address();
+                    uintptr_t end = start + section.size();
+                    if (end > start && end <= base + m_mappedSize) {
+                        result.emplace_back(start, end);
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     std::optional<size_t> FileLoader::GetSize(std::unique_ptr<LIEF::Binary>& t) {
