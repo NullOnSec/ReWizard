@@ -33,7 +33,7 @@ namespace ReWizard {
         void StaticPathExplorer(AnalysisContext* context, bool reAnalyzeAll = false, uintptr_t fromAddress = 0, bool bypassHeur = false);
         void AnalyzeFunction(AnalysisContext* context, std::unique_ptr<Function>& function, uintptr_t start, size_t* insnCount, size_t* stackModCount, bool verbose, std::queue<uintptr_t>& functionWork);
         void HandleCall(AnalysisContext* context, ExtendedInstruction* insn, uintptr_t pc, std::unique_ptr<Function>& function, std::unique_ptr<BasicBlock>& bb, std::queue<uintptr_t>& functionWork);
-        void HandleBranch(AnalysisContext* context, ExtendedInstruction* insn, uintptr_t pc, std::unique_ptr<Function>& function, std::unique_ptr<BasicBlock>& bb, std::queue<uintptr_t>& work);
+        void HandleBranch(AnalysisContext* context, ExtendedInstruction* insn, uintptr_t pc, std::unique_ptr<Function>& function, std::unique_ptr<BasicBlock>& bb, std::queue<uintptr_t>& work, std::queue<uintptr_t>& functionWork);
         bool HandleTrampoline(AnalysisContext* context, std::unique_ptr<Function>& function, std::unique_ptr<BasicBlock>& bb, ExtendedInstruction* insn);
 
         std::set<uintptr_t> CollectEntryPoints(AnalysisContext* context);

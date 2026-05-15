@@ -220,7 +220,7 @@ namespace ReWizard {
                 if (cat == ZYDIS_CATEGORY_CALL) {
                     HandleCall(context, insn, pc, function, bb, functionWork);
                 } else if (cat == ZYDIS_CATEGORY_COND_BR || cat == ZYDIS_CATEGORY_UNCOND_BR) {
-                    HandleBranch(context, insn, pc, function, bb, work);
+                    HandleBranch(context, insn, pc, function, bb, work, functionWork);
                     bb = nullptr;
 
                     if (cat == ZYDIS_CATEGORY_UNCOND_BR)
@@ -278,15 +278,28 @@ namespace ReWizard {
         }
     }
 
-    void StaticControlFlowRebuilder::HandleBranch(AnalysisContext* context, ExtendedInstruction* insn, uintptr_t pc, std::unique_ptr<Function>& function, std::unique_ptr<BasicBlock>& bb, std::queue<uintptr_t>& work) {
+    void StaticControlFlowRebuilder::HandleBranch(AnalysisContext* context, ExtendedInstruction* insn, uintptr_t pc, std::unique_ptr<Function>& function, std::unique_ptr<BasicBlock>& bb, std::queue<uintptr_t>& work, std::queue<uintptr_t>& functionWork) {
         const auto& op0 = insn->Operands()[0];
         uintptr_t imgBase = context->GetLoader()->CurrentImageBase();
         uintptr_t imgEnd = imgBase + context->GetLoader()->MappedSize();
+        auto module = context->GetModule();
+        bool isUncondBr = (insn->Instruction().meta.category == ZYDIS_CATEGORY_UNCOND_BR);
 
         if (op0.type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
             auto target = pc + insn->Instruction().length + op0.imm.value.u;
             if (context->GetLoader()->IsWithinMapping(target) && IsExecutableAddress(context->GetLoader(), target)) {
-                if (!context->GetVisited().contains(target)) work.push(target);
+                if (isUncondBr) {
+                    auto existingFn = module->GetFunctionForAddress(target);
+                    if (existingFn) {
+                        function->AddCallSite(pc, target);
+                    } else if (!context->GetVisited().contains(target)) {
+                        work.push(target);
+                        functionWork.push(target);
+                    }
+                } else {
+                    if (!context->GetVisited().contains(target))
+                        work.push(target);
+                }
                 bb->AddSuccessor(target);
             } else if (target < imgBase || target >= imgEnd) {
                 spdlog::warn("jmp out of bounds 0x{:016x} at 0x{:016x}", target, insn->Address());
