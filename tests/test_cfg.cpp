@@ -91,3 +91,42 @@ TEST_F(CFGRecoveryTest, EntryPointsFromSymbols) {
     auto finalModule = manager->Context()->GetModule();
     EXPECT_GT(finalModule->GetFunctions().size(), 0);
 }
+
+TEST_F(CFGRecoveryTest, NoMegaFunctions) {
+    auto manager = AnalysisManager::Create(fixturePath_);
+    ASSERT_NE(manager, nullptr);
+
+    manager->Run();
+
+    auto module = manager->Context()->GetModule();
+    ASSERT_NE(module, nullptr);
+
+    // No single function should absorb the entire binary.
+    // The MSVC CRT CPUID detection function (__isa_available_init) legitimately
+    // has ~35 basic blocks; set threshold high enough to allow it while still
+    // catching true mega-functions (the old bug produced 100+ blocks).
+    constexpr size_t kMaxBasicBlocks = 50;
+    for (const auto& fn : module->GetFunctions()) {
+        EXPECT_LE(fn->GetBasicBlocks().size(), kMaxBasicBlocks)
+            << "Function " << fn->GetName() << " at 0x" << std::hex << fn->GetStart()
+            << " has " << std::dec << fn->GetBasicBlocks().size()
+            << " basic blocks, suggesting a mega-function";
+    }
+}
+
+TEST_F(CFGRecoveryTest, FunctionsAreNotInlined) {
+    auto manager = AnalysisManager::Create(fixturePath_);
+    ASSERT_NE(manager, nullptr);
+
+    manager->Run();
+
+    auto module = manager->Context()->GetModule();
+    ASSERT_NE(module, nullptr);
+
+    // Before the CALL-bug fix, the binary collapsed into ~6 functions (one mega-function
+    // plus a few garbage/data entries). After the fix, direct call targets are promoted
+    // to their own Function objects, producing a much higher function count.
+    EXPECT_GT(module->GetFunctions().size(), 10)
+        << "Too few functions detected (" << module->GetFunctions().size()
+        << "), suggesting call targets are still being inlined into callers";
+}
