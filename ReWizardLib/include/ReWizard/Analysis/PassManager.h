@@ -3,26 +3,17 @@
 
 #include <ReWizard/Analysis/PassProvider.h>
 
-
-#include <array>
-#include <cstdint>
-#include <thread>
-#include <queue>
-#include <mutex>
-#include <future>
-
 namespace ReWizard {
 
     class AnalysisPassManager {
     public:
-        AnalysisPassManager() { }
+        AnalysisPassManager() = default;
 
         void AddPass(std::unique_ptr<BaseAnalysisPass>& p) {
             PassProvider::AddPass(p);
         }
 
-        void RunAllAsync(AnalysisContext* ctx);
-        std::future<bool> RunAsync(AnalysisContext* ctx, BaseAnalysisPass* pass);
+        bool RunAll(AnalysisContext* ctx);
 
         BaseAnalysisPass* GetPassByName(const std::string& name) {
             auto p = PassProvider::Get(name);

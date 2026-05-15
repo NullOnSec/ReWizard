@@ -3,6 +3,7 @@
 
 #include <ReWizard/FileLoader/FileLoader.h>
 #include <ReWizard/Analysis/Units/Function.h>
+#include <ReWizard/Analysis/Units/SymbolTable.h>
 #include <ReWizard/Analysis/AnalysisManager.h>
 
 #include <memory>
@@ -20,12 +21,7 @@ namespace ReWizard {
 
 	class Module {
 	public:
-		~Module() {
-			for (auto& [_, insn] : m_instructions) {
-				if (insn) 
-					insn.reset(nullptr);
-			}
-		}
+		~Module() = default;
 
 		static std::unique_ptr<Module> Create(AnalysisContext* context);
 
@@ -33,10 +29,7 @@ namespace ReWizard {
 			return Function::Create(this, name);
 		}
 
-		Function* AddFunction(PtrFunction fn) {
-			m_functions.push_back(std::move(fn));
-			return m_functions.back().get();
-		}
+		Function* AddFunction(PtrFunction fn);
 
 		const std::string GetPath() const;
 
@@ -46,13 +39,7 @@ namespace ReWizard {
 			return m_functions;
 		}
 
-		Function* GetFunctionForAddress(uintptr_t address) {
-			for (auto& fn : m_functions) {
-				if (address >= fn->GetStart() && address <= fn->GetEnd())
-					return fn.get();
-			}
-			return nullptr;
-		}
+		Function* GetFunctionForAddress(uintptr_t address);
 
  		InstructionCollection& GetInstructions() {
 			return m_instructions;
@@ -72,12 +59,17 @@ namespace ReWizard {
 			}
 		}
 
+		SymbolTable* GetSymbolTable() { return &m_symbolTable; }
+		const SymbolTable* GetSymbolTable() const { return &m_symbolTable; }
+
 	private:
 		Module(AnalysisContext* context);
 
 		AnalysisContext* m_context{nullptr};
 		InstructionCollection m_instructions;
 		FunctionCollection m_functions;
+		std::map<uintptr_t, Function*> m_functionByStart;
+		SymbolTable m_symbolTable;
 	};
 
 }

@@ -5,6 +5,7 @@
     that they are automatically registered
 */
 #include <ReWizard/Analysis/Passes/StaticControlFlowRebuilder.h>
+#include <ReWizard/Analysis/Passes/ImportAnalysisPass.h>
 
 #include <spdlog/spdlog.h>
 

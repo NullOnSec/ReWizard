@@ -117,6 +117,7 @@ namespace ReWizard {
             return false;
         }
 
+        ApplyRelocations();
         SetArch();
 
         return true;
@@ -165,6 +166,62 @@ namespace ReWizard {
         }
 
         return std::nullopt;  // Unsupported binary type
+    }
+
+    void FileLoader::ApplyRelocations() {
+        if (!m_target || !m_mappedPtr)
+            return;
+
+        auto pe = dynamic_cast<LIEF::PE::Binary*>(m_target.get());
+        if (!pe)
+            return;
+
+        uintptr_t preferredBase = pe->imagebase();
+        uintptr_t actualBase = reinterpret_cast<uintptr_t>(m_mappedPtr);
+        if (actualBase == preferredBase)
+            return;
+
+        ptrdiff_t delta = static_cast<ptrdiff_t>(actualBase - preferredBase);
+
+        for (const auto& reloc : pe->relocations()) {
+            uintptr_t pageRva = reloc.virtual_address();
+            for (const auto& entry : reloc.entries()) {
+                uintptr_t addr = actualBase + pageRva + entry.position();
+                if (addr + sizeof(uint32_t) > actualBase + m_mappedSize)
+                    continue;
+
+                auto type = static_cast<uint16_t>(entry.type());
+                if (type == 0) // IMAGE_REL_BASED_ABSOLUTE (padding)
+                    continue;
+
+                switch (type) {
+                case 3: { // IMAGE_REL_BASED_HIGHLOW
+                    uint32_t* p = reinterpret_cast<uint32_t*>(addr);
+                    *p = static_cast<uint32_t>(*p + delta);
+                    break;
+                }
+                case 10: { // IMAGE_REL_BASED_DIR64
+                    uint64_t* p = reinterpret_cast<uint64_t*>(addr);
+                    *p = static_cast<uint64_t>(*p + delta);
+                    break;
+                }
+                case 1: { // IMAGE_REL_BASED_HIGH
+                    uint16_t* p = reinterpret_cast<uint16_t*>(addr);
+                    uint32_t full = (static_cast<uint32_t>(*p) << 16) + static_cast<uint32_t>(delta);
+                    *p = static_cast<uint16_t>(full >> 16);
+                    break;
+                }
+                case 2: { // IMAGE_REL_BASED_LOW
+                    uint16_t* p = reinterpret_cast<uint16_t*>(addr);
+                    *p = static_cast<uint16_t>(*p + static_cast<uint16_t>(delta));
+                    break;
+                }
+                default:
+                    spdlog::warn("Unhandled relocation type {} at 0x{:x}", type, addr);
+                    break;
+                }
+            }
+        }
     }
 
     std::optional<size_t> FileLoader::GetSize(std::unique_ptr<LIEF::Binary>& t) {

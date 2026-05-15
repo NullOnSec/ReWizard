@@ -70,6 +70,7 @@ namespace ReWizard {
     private:
         FileLoader(const std::string& name);
         bool LoadSections();
+        void ApplyRelocations();
 
         void SetArch() {
             auto hdr = m_target->header();

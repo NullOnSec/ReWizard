@@ -1,6 +1,7 @@
 #include <ReWizard/Analysis/Units/Function.h>
 #include <ReWizard/Analysis/Units/Module.h>
 #include <ReWizard/Analysis/Units/BasicBlock.h>
+#include <ReWizard/Analysis/Units/SymbolTable.h>
 #include <queue>
 
 namespace ReWizard {
@@ -225,6 +226,31 @@ namespace ReWizard {
 
                     if (insn->IsIndirect() && insn->IndirectValue()) {
                         oss << " --> 0x" << std::hex << insn->IndirectValue();
+                    }
+
+                    auto cat = insn->Instruction().meta.category;
+                    if (cat == ZYDIS_CATEGORY_CALL) {
+                        if (auto* symTable = module_->GetSymbolTable()) {
+                            const auto& op0 = insn->Operands()[0];
+                            uintptr_t target = 0;
+                            if (op0.type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
+                                target = addr + insn->Instruction().length + op0.imm.value.u;
+                            } else if (op0.type == ZYDIS_OPERAND_TYPE_MEMORY && op0.mem.base == ZYDIS_REGISTER_RIP) {
+                                target = addr + insn->Instruction().length + op0.mem.disp.value;
+                            } else if (op0.type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                                       op0.mem.base == ZYDIS_REGISTER_NONE &&
+                                       op0.mem.index == ZYDIS_REGISTER_NONE) {
+                                target = static_cast<uintptr_t>(op0.mem.disp.value);
+                            }
+
+                            if (target) {
+                                if (const auto* imp = symTable->GetImportByAddress(target)) {
+                                    oss << " ; " << imp->dll << "!" << imp->name;
+                                } else if (const auto* exp = symTable->GetExportByAddress(target)) {
+                                    oss << " ; " << exp->name;
+                                }
+                            }
+                        }
                     }
 
                     disassemblyCache_.push_back(oss.str());
