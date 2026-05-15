@@ -4,11 +4,11 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 ---
 
-## Phase 0 — Stabilization & Testing Infrastructure
+## Phase 0 — Stabilization & Testing Infrastructure ✅
 
 **Goal:** Fix known bugs, establish testing, make the codebase ready for new development.
 
-### 0.1 Fix Win32InternalTypes.hpp
+### 0.1 Fix Win32InternalTypeshpp
 - Remove the duplicate definitions (lines 343-667) that exist outside the `#ifndef` guard and `namespace ReWizard`.
 - Keep only the single copy inside the guard.
 
@@ -45,7 +45,7 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 ---
 
-## Phase 1 — Import/Export Table Analysis
+## Phase 1 — Import/Export Table Analysis ✅
 
 **Goal:** Enrich the `Module` with symbol information from the binary's import/export tables, enabling named call targets and cross-references.
 
@@ -72,7 +72,7 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 ---
 
-## Phase 2 — Improved Static Analysis
+## Phase 2 — Improved Static Analysis ✅
 
 **Goal:** Move beyond linear sweep to recursive descent, improve CFG accuracy, and produce useful output.
 
@@ -111,13 +111,30 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 **Goal:** Implement dynamic analysis using execution traces to resolve targets that static analysis cannot. Bochs is the primary backend (full-system emulation); Unicorn is an optional accelerator for simple micro-execution.
 
-### 3.1 Trace Infrastructure
+### 3.1 Trace Infrastructure ✅
 - `Hybrid/TraceRecord.h` — PC, registers, memory accesses.
 - `ITraceReader.h` — abstract interface for trace consumers.
-- `SimpleTraceReader` — JSON trace file reader.
-- Add indexed PC lookup (`unordered_map`) for O(1) queries.
+- `SimpleTraceReader` — JSON trace file reader with O(1) PC lookup.
+- Pass dependency system with topological sort (fixes critical bug where 4/6 passes silently no-op).
 
-### 3.2 Bochs Integration
+### 3.2 Platform Abstraction ✅
+- `MemoryMapper` interface extracts platform-specific memory management from `FileLoader`.
+- `Win32MemoryMapper` (VirtualAlloc/VirtualFree) and `PosixMemoryMapper` (mmap/munmap).
+- Unblocks Linux/macOS compilation.
+
+### 3.3 HybridAnalysisPass ✅
+- New `Analysis/Passes/HybridAnalysisPass.h|.cpp` (GenericPass).
+- Consumes trace data from `IEmulator` / `ITraceReader`.
+- Resolves indirect call/jump targets observed at runtime.
+- Updates `Function::callSites_` with resolved targets.
+- Removes opaque predicate markers from functions proven non-opaque by trace.
+- Marks functions that were touched by trace as "hybrid-verified".
+
+### 3.4 Hybrid/Static Iteration ✅
+- After `HybridAnalysisPass` resolves indirect targets, re-run `StaticControlFlowRebuilder` on newly reachable code.
+- Pass dependency system ensures correct execution order.
+
+### 3.5 Bochs Integration
 - Add Bochs as a FetchContent or prebuilt dependency (LGPL v2.1).
 - Design `IEmulator` / `ITraceProducer` interface:
   - `Boot()` — start VM
@@ -127,61 +144,64 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 - `BochsExecutor` implementation using Bochs instrumentation callbacks (`bx_instr_before_execution`).
 - Snapshot strategy: boot once → save state → restore per analysis session.
 
-### 3.3 HybridAnalysisPass
-- New `Analysis/Passes/HybridAnalysisPass.h|.cpp` (GenericPass).
-- Consumes trace data from `IEmulator` / `ITraceReader`.
-- Resolves indirect call/jump targets observed at runtime.
-- Updates `Function::callSites_` with resolved targets.
-- Removes opaque predicate markers from functions proven non-opaque by trace.
-- Marks functions that were touched by trace as "hybrid-verified".
-
-### 3.4 Hybrid/Static Iteration
-- After `HybridAnalysisPass` resolves indirect targets, re-run `StaticControlFlowRebuilder` on newly reachable code.
-- Add pass dependency tracking to `PassManager` so passes run in correct dependency order.
-
-### 3.5 UnicornExecutor (Optional Accelerator)
+### 3.6 UnicornExecutor (Optional Accelerator)
 - Encapsulate binspektor prototype as `UnicornExecutor` implementing `IEmulator`.
 - Syscall service layer: table-driven NT syscall handlers (~25-30 common calls).
 - Only for simple micro-execution (arithmetic predicates, short code regions).
 - Falls back to `BochsExecutor` for unhandled cases.
 
-### 3.6 Tests
+### 3.7 Tests
 - Ship a small trace recording fixture.
 - Test that `HybridAnalysisPass` correctly resolves indirect calls from trace data.
 - Test Bochs snapshot save/restore roundtrip.
 
 ---
 
-## Phase 4 — Deobfuscation
+## Phase 4 — Deobfuscation (IR-Based)
 
-**Goal:** Use accumulated analysis data to deobfuscate binary code.
+**Goal:** Use VEX IR to perform architecture-independent deobfuscation transformations. Operating on IR instead of raw x86 instructions makes passes sound, portable, and composable.
 
-### 4.1 Opaque Predicate Elimination
+### 4.0 VEX IR Integration
+- Add angr's `libvex` (from pyvex C core) as a CMake FetchContent dependency.
+- Create `IR/VEXLifter.h|.cpp` — wraps `libvex` to lift raw bytes to `IRSB` (IR Super Block).
+- Integrate with `BasicBlock` — each BB holds an optional `IRSB` for its lifted IR.
+- Create `IR/IRBlock.h` — C++ wrapper around VEX IR types (IRStmt, IRExpr, IRType) for cleaner pass code.
+- Test: lift known x86 byte sequences, verify IR output.
+
+### 4.1 Opaque Predicate Elimination ✅
 - `OpaquePredicatePass` (GenericPass).
 - Uses `AbstractInterpretationPass` results to identify always-true / always-false branches.
 - Rewrites CFG: removes dead branches, merges basic blocks.
 
 ### 4.2 Control Flow Flattening Recovery
 - `DeobfuscationFlattenPass` (GenericPass).
-- Pattern-matches control-flow flattening dispatcher structures (switch-based state machines).
-- Reconstructs original control flow.
+- Lift flattened basic blocks to VEX IR.
+- Pattern-match dispatcher state variables in VEX IR (WrTmp of state variable → Switch-like Exit structure).
+- Reconstruct original control flow from IR-level analysis.
+- Write recovered CFG back to `BasicBlock`/`Function` structure.
 
 ### 4.3 Dead Code Elimination
 - `DeadCodeEliminationPass` (GenericPass).
+- Operates on VEX IR: identify WrTmp/Put assignments that are never read.
 - Removes unreachable basic blocks (confirmed by abstract interpretation or hybrid trace).
-- Removes dead stores and unused assignments.
+- Removes dead stores (Store to address that is never read before next Store or function exit).
 
 ### 4.4 Constant Folding & Simplification
 - `ConstantFoldingPass` (GenericPass).
-- Evaluates constant expressions at analysis time.
-- Simplifies arithmetic identities (e.g., `xor rax, rax` → 0).
+- Operates on VEX IR: evaluate constant arithmetic operations at analysis time.
+- Simplify arithmetic identities (e.g., `xor rax, rax` → WrTmp(t0) = 0:I64).
+- Propagate constants through VEX temporaries (constantargh-style propagation).
+- This is sound because VEX makes all side-effects explicit.
 
-### 4.5 Output Reconstructed Binary
-- Optional: ability to write simplified/deobfuscated code back to a binary or IR representation.
+### 4.5 IR → Native Writeback (Future)
+- After IR-level transformations, write simplified IR back to native code.
+- This is optional and can be deferred — the primary use case is analysis, not binary rewriting.
+- If implemented, use VEX's built-in x86/AMD64 backend for IR → bytes.
 
 ### 4.6 Tests
 - Craft obfuscated test binaries (opaque predicates, flattened CFG).
-- Verify each deobfuscation pass produces the expected simplified output.
+- Verify each deobfuscation pass produces the expected simplified VEX IR.
+- Test constant folding on known arithmetic identities.
 
 ---
 
@@ -189,13 +209,15 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 **Goal:** Polish, performance, and advanced capabilities.
 
-### 5.1 Kernel Driver Analysis
+### 5.1 Multi-Architecture Support
+- VEX IR already supports ARM, MIPS, PPC in addition to x86.
+- Add `FileLoader` format detection for ELF and MachO.
+- Add ELF/MachO-specific passes (`ELFImportAnalysisPass`, etc.).
+- `Disassembler` abstraction: Zydis for x86/x86_64, Capstone for ARM/MIPS (or VEX native disassembly).
+
+### 5.2 Kernel Driver Analysis
 - Extend `FileLoader` to handle kernel-mode PE (no relocations, different section attributes).
 - Add `KernelAnalysisPass` that sets up kernel execution context in Bochs.
-
-### 5.2 Multi-format Improvements
-- Improve ELF and MachO import/export handling in `ImportAnalysisPass`.
-- Add format-specific passes for each binary type.
 
 ### 5.3 Performance Optimizations
 - Replace `std::map<uintptr_t, unique_ptr<ExtendedInstruction>>` with `std::unordered_map` or interval tree.
@@ -216,8 +238,9 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 ## Dependency Notes
 
+- **VEX IR** (from angr/pyvex) is the chosen intermediate representation for deobfuscation passes. BSD-2-Clause license. C library compiles with MSVC. Supports x86, AMD64, ARM, ARM64, MIPS, PPC. No custom lifters — we use angr's maintained `libvex` directly.
 - **Bochs** will be integrated as a FetchContent dependency or linked as a prebuilt library (LGPL v2.1). Required for Phase 3 hybrid analysis.
-- **Unicorn** remains linked in `ReWizardLib` for Phase 3.5 optional micro-execution accelerator.
+- **Unicorn** remains linked in `ReWizardLib` for Phase 3.6 optional micro-execution accelerator.
 - **Google Test** added via FetchContent for the test framework.
 - All dependencies must be downloaded to `Z:` (not `C:`) per project policy.
 - **PANDAS** is explicitly **not used** — Linux-only host, cannot run on Windows.
@@ -228,9 +251,13 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 |----------|-----------|
 | Pass-based pipeline | Extensible, allows re-running passes after new info is discovered |
 | Bochs primary backend | Full-system emulation — no API stubs needed, works on all host platforms. Snapshot mitigates boot time. |
-| Unicorn optional accelerator | Lightweight micro-execution for simple arithmetic predicates. Syscall service layer for common NT calls. Not the foundation — correctness from Bochs. |
+| Unicorn optional accelerator | Lightweight micro-execution for simple arithmetic predicates. Not the foundation — correctness from Bochs. |
 | No PANDAS | Linux-only host, cannot run on Windows. Cross-platform is a hard requirement. |
+| VEX IR for deobfuscation | Architecture-independent, maintained by angr, BSD-2-Clause, compiles with MSVC. Enables sound constant folding, dead code elimination, and CFF recovery on IR instead of raw x86. Multi-arch future-proof. |
+| No LLVM IR | LLVM is too large/heavyweight for our needs. VEX is lighter, purpose-built for binary analysis, and already supports the architectures we need. |
+| No custom lifters | We must use readily available, maintained lifters — not write our own. VEX/pyvex provides this. |
 | Boost.Graph for CFG | Already in use, well-tested, provides GraphViz output out of the box |
 | Zydis for disassembly | Best-in-class x86 decoder, v4 supports all modern ISA extensions |
 | Static auto-registration | Passes self-register via `PassRegistrar<T>` — no manual registry needed, just include the header |
-| Pass dependency system | `RunAfter()` / `DependsOn()` declarations with topological sort. Fixes critical bug where 4/6 passes silently no-op. |
+| Pass dependency system | `Dependencies()` declarations with topological sort. Fixes critical bug where 4/6 passes silently no-op. |
+| MemoryMapper abstraction | Platform-specific memory management isolated behind interface. Unblocks Linux/macOS compilation. |

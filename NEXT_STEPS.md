@@ -2,21 +2,6 @@
 
 Updated: 2026-05-15
 
-## Critical Bug Discovered
-
-**Pass execution order is broken.** Passes run in `std::map` order (alphabetical by name), causing 4 out of 6 passes to silently do nothing:
-
-| # | Current Order | Problem |
-|---|---|---|
-| 1 | `AbstractInterpretationPass` | **No-op** — iterates empty function list (CFG not built yet) |
-| 2 | `DataFlowAnalysisPass` | **No-op** — same reason |
-| 3 | `HybridAnalysisPass` | **No-op** — no functions are marked |
-| 4 | `ImportAnalysisPass` | Works (populates symbol table) |
-| 5 | `OpaquePredicatePass` | **No-op** — reads opaque predicate data never set |
-| 6 | `StaticControlFlowRebuilder` | Works (builds CFG) — but runs LAST |
-
-**Correct order:** ImportAnalysisPass → StaticControlFlowRebuilder → DataFlowAnalysisPass → AbstractInterpretationPass → OpaquePredicatePass → HybridAnalysisPass
-
 ## Architecture Decisions Updated
 
 ### Hybrid Engine: Bochs Primary, Unicorn Optional
@@ -27,9 +12,19 @@ Updated: 2026-05-15
 - **No Python scripts** — everything embedded in C++. No "record on Linux / analyze on Windows" workflow.
 - **Bochs snapshot strategy** — boot once, save CPU+memory state, restore for each analysis session
 
+### IR: VEX IR for Deobfuscation
+
+- **VEX IR is the chosen IR** for deobfuscation (constant folding, dead code elimination, CFF flattening recovery)
+- **LLLVM is OUT** — too large/heavyweight for our use case
+- **No custom lifters** — must use readily available, maintained code only
+- angr's `libvex` (from pyvex C core) compiles with MSVC, BSD-2-Clause license, supports x86/AMD64/ARM/ARM64/MIPS/PPC
+- Deobfuscation passes operate on VEX IR statements (WrTmp, Put, Store, Exit) instead of raw x86 instructions
+- This makes transformations architecture-independent and sound (all side-effects explicit in IR)
+- Multi-architecture future-proof: same deobfuscation passes work on ARM, MIPS, etc.
+
 ### Bochs Rationale
 
-The binspektor prototype needed **20 hooks (13 unique implementations) just for hello-world**. Real binaries hit hundreds of APIs. The syscall service layer (~25-30 NT handlers) reduces this but is still a maintenance trap — complex syscalls like `NtAllocateVirtualMemory` have nuanced semantics, and CRT initialization, TLS callbacks, and SEH all need stubs. Bochs provides **correctness by default** with full OS emulation. Snapshot mitigates the boot-time penalty.
+The binspektor prototype needed **20 hooks (13 unique implementations) just for hello-world**. Real binaries hit hundreds of APIs. The syscall service layer (~25-30 NT handlers) reduces this but is still a maintenance trap. Bochs provides **correctness by default** with full OS emulation. Snapshot mitigates the boot-time penalty.
 
 ## What's Been Done
 
@@ -47,43 +42,55 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
 
 **Phase 3 — Hybrid Analysis (IN PROGRESS):**
 - ✅ 3.1 Trace Infrastructure — `Hybrid/TraceRecord.h`, `ITraceReader.h`, `SimpleTraceReader` (JSON trace format)
+- ✅ 3.2 Platform Abstraction — `MemoryMapper` interface, `Win32MemoryMapper`, `PosixMemoryMapper`
 - ✅ 3.3 HybridAnalysisPass — consumes trace data, resolves indirect targets, clears disproven opaque predicates, marks hybrid-verified
 - ✅ 3.4 Hybrid/Static Iteration — `StaticControlFlowRebuilder::ReAnalyzeFrom()` called from HybridAnalysisPass
 - ✅ 3.7 SimpleTraceReader O(1) PC Lookup — unordered_map index, O(1) GetRecordsForPC()
+- ✅ Pass dependency system — topological sort fixes critical bug where 4/6 passes silently no-opped
 - ⏳ 3.5 Bochs Integration — IEmulator interface, BochsExecutor, snapshot management
 - ⏳ 3.6 UnicornExecutor (optional) — micro-execution fast-path with syscall service layer
 - ❌ 3.2 PANDAS Trace Recording Workflow — **REJECTED**: Linux-only, cannot run on Windows
 
 **Phase 4 — Deobfuscation (IN PROGRESS):**
 - ✅ 4.1 OpaquePredicatePass — removes dead successors from always-true/always-false branches, rebuilds CFG
-- ⏳ 4.2 DeobfuscationFlattenPass — pattern-match control-flow flattening dispatchers
-- ⏳ 4.3 DeadCodeEliminationPass — remove unreachable basic blocks
-- ⏳ 4.4 ConstantFoldingPass — evaluate constant expressions
+- ⏳ 4.0 VEX IR Integration — add libvex dependency, create VEXLifter, IRBlock wrapper
+- ⏳ 4.2 DeobfuscationFlattenPass — CFF recovery on VEX IR
+- ⏳ 4.3 DeadCodeEliminationPass — dead code elimination on VEX IR
+- ⏳ 4.4 ConstantFoldingPass — constant propagation and folding on VEX IR
 
 **Phase 5 — Extended Features:**
 - ⏳ Not started
 
-## Recommended Next Steps (in priority order)
+## Completed Tasks
 
-### ✅ DONE — Pass Dependency System (P0 — Critical Bug Fix)
+### ✅ Pass Dependency System (P0 — Critical Bug Fix)
 - Added `Dependencies()` to `BaseAnalysisPass`, overridden by all 6 passes
 - Implemented Kahn's topological sort in `PassManager::RunAll()`
-- Passes now execute in correct dependency order
+- Correct order: ImportAnalysisPass → StaticControlFlowRebuilder → DataFlowAnalysisPass+AbstractInterpretationPass → OpaquePredicatePass → HybridAnalysisPass
 - All 31 tests pass
 
-### ✅ DONE — MemoryMapper Platform Abstraction
+### ✅ MemoryMapper Platform Abstraction
 - Extracted `MemoryMapper` interface with Map/Unmap/Zero methods
 - Implemented `Win32MemoryMapper` (VirtualAlloc/VirtualFree) and `PosixMemoryMapper` (mmap/munmap)
 - `FileLoader` takes `MemoryMapper` via constructor; auto-creates platform-specific impl
 - PosixMemoryMapper excluded from Windows build via CMake conditional
 - All 31 tests pass
 
-### ✅ DONE — SimpleTraceReader O(1) PC Lookup
+### ✅ SimpleTraceReader O(1) PC Lookup
 - Added `unordered_map<uintptr_t, vector<size_t>>` index built during `Load()`
 - `GetRecordsForPC()` now O(1) average case instead of O(n) linear scan
 - All 31 tests pass
 
-### 1. Bochs Integration Architecture (NEXT MAJOR TASK)
+## Recommended Next Steps (in priority order)
+
+### 1. VEX IR Integration (Prerequisite for Phase 4 Deobfuscation)
+- Add angr's `libvex` (from pyvex C core) as CMake FetchContent dependency
+- Create `IR/VEXLifter.h|.cpp` — wraps `libvex` to lift raw bytes at address → `IRSB`
+- Create `IR/IRBlock.h` — C++ wrapper around VEX IR types (IRStmt, IRExpr, IRType)
+- Integrate with `BasicBlock`: each BB holds optional `IRBlock` for its lifted IR
+- Test: lift known x86 byte sequences (nop, mov, add, jmp) and verify IRSB output
+
+### 2. Bochs Integration Architecture
 - Design `IEmulator` / `ITraceProducer` interface
 - Add Bochs as FetchContent/prebuilt dependency (LGPL v2.1)
 - `BochsExecutor` implementation:
@@ -93,24 +100,41 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
   - Yield `TraceRecord`s compatible with existing `HybridAnalysisPass`
 - Snapshot format: CPU state + memory regions + device state
 
-### 2. UnicornExecutor (Optional Accelerator)
+### 3. ConstantFoldingPass (VEX IR-based)
+- Lift basic blocks to VEX IR
+- Evaluate constant arithmetic operations (Add32, Sub32, etc. with constant operands)
+- Propagate constants through temporaries
+- Simplify identities (xor tmp, tmp → 0; sub tmp, tmp → 0; and tmp, 0xFFFF → zero-extend)
+
+### 4. DeadCodeEliminationPass (VEX IR-based)
+- Identify WrTmp/Put assignments that are never read (dead temporaries)
+- Remove unreachable basic blocks
+- Remove dead Store operations
+
+### 5. DeobfuscationFlattenPass (VEX IR-based)
+- Pattern-match dispatcher state variable in VEX IR
+- Reconstruct original control flow from flattened switch-like state machines
+- Write recovered CFG back to BasicBlock/Function structure
+
+### 6. UnicornExecutor (Optional Accelerator)
 - Encapsulate binspektor prototype as `UnicornExecutor` implementing `IEmulator`
 - Syscall service layer: table-driven NT syscall handlers (~25-30 common)
 - Only for simple micro-execution (arithmetic predicates, short code regions)
 - Falls back to Bochs for unhandled cases (future)
 
-### 3. Phase 4 Deobfuscation Passes
-- 4.2 DeobfuscationFlattenPass, 4.3 DeadCodeEliminationPass, 4.4 ConstantFoldingPass
+## Key Files Recently Modified
 
-## Files Recently Modified
-
-- `ReWizardLib/include/ReWizard/Analysis/Passes/OpaquePredicatePass.h` (new)
-- `ReWizardLib/source/Analysis/Passes/OpaquePredicatePass.cpp` (new)
-- `ReWizardLib/include/ReWizard/Analysis/Units/BasicBlock.h` (added RemoveSuccessor)
-- `ReWizardLib/include/ReWizard/Analysis/Units/Function.h` (added opaquePredicateResults_, hybridVerified_)
-- `ReWizardLib/source/Analysis/Passes/StaticControlFlowRebuilder.cpp` (added ReAnalyzeFrom)
-- `tests/test_opaque_predicate.cpp` (new)
-- `tests/test_hybrid_analysis.cpp` (added ResolvedTargetTriggersReAnalysis)
+- `ReWizardLib/include/ReWizard/Analysis/Passes/BasePass.hpp` (added Dependencies())
+- `ReWizardLib/source/Analysis/PassManager.cpp` (topological sort)
+- `ReWizardLib/include/ReWizard/Memory/MemoryMapper.h` (new)
+- `ReWizardLib/include/ReWizard/Memory/Win32MemoryMapper.h` (new)
+- `ReWizardLib/source/Memory/Win32MemoryMapper.cpp` (new)
+- `ReWizardLib/include/ReWizard/Memory/PosixMemoryMapper.h` (new)
+- `ReWizardLib/source/Memory/PosixMemoryMapper.cpp` (new)
+- `ReWizardLib/include/ReWizard/FileLoader/FileLoader.h` (MemoryMapper integration)
+- `ReWizardLib/source/FileLoader/FileLoader.cpp` (uses MemoryMapper, no direct Win32 calls)
+- `ReWizardLib/include/ReWizard/Hybrid/SimpleTraceReader.h` (PC index)
+- `ReWizardLib/source/Hybrid/SimpleTraceReader.cpp` (O(1) GetRecordsForPC)
 
 ## Build Reminders
 
