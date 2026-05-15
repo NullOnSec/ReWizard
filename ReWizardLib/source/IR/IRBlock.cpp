@@ -1,24 +1,23 @@
 #include <ReWizard/IR/IRBlock.h>
 
-#include <llvm-c/Core.h>
-#include <llvm-c/Analysis.h>
+#ifdef REWIZARD_LLVM_ENABLED
+#include <llvm/IR/BasicBlock.h>
+#endif
 
 namespace ReWizard {
 
     class IRBlock::Impl {
     public:
-        LLVMBasicBlockRef block = nullptr;
-        bool ownsReference = false;
+#ifdef REWIZARD_LLVM_ENABLED
+        llvm::BasicBlock* block = nullptr;
+#else
+        void* block = nullptr;
+#endif
     };
 
     IRBlock::IRBlock() : impl_(std::make_unique<Impl>()) {}
 
-    IRBlock::~IRBlock() {
-        if (impl_ && impl_->block && impl_->ownsReference) {
-            // LLVM doesn't provide a direct delete for basic blocks via C API
-            // In real implementation with C++ API: delete block;
-        }
-    }
+    IRBlock::~IRBlock() = default;
 
     IRBlock::IRBlock(IRBlock&& other) noexcept
         : impl_(std::move(other.impl_)), nativeAddr_(other.nativeAddr_), name_(std::move(other.name_)) {
@@ -36,19 +35,30 @@ namespace ReWizard {
     }
 
     std::unique_ptr<IRBlock> IRBlock::Wrap(llvm::BasicBlock* bb) {
-        // Stub: will be implemented when LLVM C++ API is available
         auto result = std::make_unique<IRBlock>();
-        result->SetName("bb_stub");
+        if (bb) {
+            result->SetName(bb->getName().str());
+#ifdef REWIZARD_LLVM_ENABLED
+            result->impl_->block = bb;
+#endif
+        }
         return result;
     }
 
     llvm::BasicBlock* IRBlock::GetLLVMBlock() const {
-        // Stub: will be implemented when LLVM C++ API is available
+#ifdef REWIZARD_LLVM_ENABLED
+        return impl_->block;
+#else
         return nullptr;
+#endif
     }
 
     bool IRBlock::IsValid() const {
+#ifdef REWIZARD_LLVM_ENABLED
         return impl_->block != nullptr;
+#else
+        return false;
+#endif
     }
 
 }

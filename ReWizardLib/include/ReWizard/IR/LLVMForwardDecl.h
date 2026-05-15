@@ -11,9 +11,6 @@ namespace llvm {
     class BasicBlock;
     class Value;
     class Instruction;
-    class IRBuilderBase;
-    template <typename T> class IRBuilder;
-    using IRBuilderDefaultInserter = IRBuilderBase;
     class Type;
     class IntegerType;
     class PointerType;

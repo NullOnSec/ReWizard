@@ -51,7 +51,12 @@ if (LLVM_FOUND)
     message(STATUS "LLVM found: ${LLVM_PACKAGE_VERSION}")
     target_compile_definitions(ReWizardLib PUBLIC REWIZARD_LLVM_ENABLED)
     target_include_directories(ReWizardLib SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
-    target_link_libraries(ReWizardLib PUBLIC ${LLVM_LIBRARIES})
+    # Map required components to actual library targets
+    llvm_map_components_to_libnames(LLVM_REQ_LIBS
+        Core Support IRReader X86Info X86Desc X86CodeGen X86AsmParser
+        Analysis TransformUtils ScalarOpts InstCombine
+    )
+    target_link_libraries(ReWizardLib PUBLIC ${LLVM_REQ_LIBS})
 else()
     message(WARNING "LLVM C++ libraries not found. IR layer will use forward declarations only.\n"
                     "To enable full LLVM support, build LLVM first:\n"
