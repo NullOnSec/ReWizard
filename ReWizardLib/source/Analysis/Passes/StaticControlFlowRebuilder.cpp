@@ -32,6 +32,13 @@ namespace ReWizard {
         return true;
     }
 
+    bool StaticControlFlowRebuilder::IsExecutableAddress(FileLoader* loader, uintptr_t addr) const {
+        for (auto& [start, end] : loader->GetExecutableSections()) {
+            if (addr >= start && addr < end) return true;
+        }
+        return false;
+    }
+
     std::set<uintptr_t> StaticControlFlowRebuilder::CollectEntryPoints(AnalysisContext* context) {
         std::set<uintptr_t> entries;
         auto loader = context->GetLoader();
@@ -41,18 +48,15 @@ namespace ReWizard {
         auto ep = binary->entrypoint();
         if (loader->Binary()->imagebase() != loader->CurrentImageBase())
             ep = (ep - loader->Binary()->imagebase()) + loader->CurrentImageBase();
-        entries.insert(ep);
+        if (IsExecutableAddress(loader, ep))
+            entries.insert(ep);
 
         // Exported symbols
         auto* symTable = context->GetModule()->GetSymbolTable();
         if (symTable) {
             for (const auto& exp : symTable->GetExports()) {
-                if (exp.address && loader->IsWithinMapping(exp.address))
+                if (exp.address && loader->IsWithinMapping(exp.address) && IsExecutableAddress(loader, exp.address))
                     entries.insert(exp.address);
-            }
-            for (const auto& imp : symTable->GetImports()) {
-                if (imp.iatEntry && loader->IsWithinMapping(imp.iatEntry))
-                    entries.insert(imp.iatEntry);
             }
         }
 
@@ -88,13 +92,19 @@ namespace ReWizard {
             if (module->GetFunctionForAddress(pc))
                 continue;
 
+            // Only start functions in executable sections
+            if (!IsExecutableAddress(loader, pc)) {
+                spdlog::debug("StaticPathExplorer: skipping non-executable entry point 0x{:016x}", pc);
+                continue;
+            }
+
             auto fn = module->CreateFunction();
             fn->SetStart(pc);
             fn->SetEnd(pc);
 
             size_t insnCount = 0, stackModifier = 0;
 
-            AnalyzeFunction(context, fn, pc, &insnCount, &stackModifier, verbose);
+            AnalyzeFunction(context, fn, pc, &insnCount, &stackModifier, verbose, functionWork);
             if (bypassHeur) {
                 fn->MarkForHybridAnalysis();
             } else if (insnCount && (fn->ContainsIndirectCalls() || fn->ContainsIndirectJumps())) {
@@ -117,7 +127,7 @@ namespace ReWizard {
         LinearSweepFallback(context, functionWork);
     }
 
-    void StaticControlFlowRebuilder::AnalyzeFunction(AnalysisContext* context, std::unique_ptr<Function>& function, uintptr_t start, size_t* insnCount, size_t* stackModCount, bool verbose) {
+    void StaticControlFlowRebuilder::AnalyzeFunction(AnalysisContext* context, std::unique_ptr<Function>& function, uintptr_t start, size_t* insnCount, size_t* stackModCount, bool verbose, std::queue<uintptr_t>& functionWork) {
         auto module = context->GetModule();
         auto loader = context->GetLoader();
         auto &disassembler = context->GetDisassembler();
@@ -208,7 +218,7 @@ namespace ReWizard {
                 auto& op0 = insn->Operands()[0];
 
                 if (cat == ZYDIS_CATEGORY_CALL) {
-                    HandleCall(context, insn, pc, function, bb, work);
+                    HandleCall(context, insn, pc, function, bb, functionWork);
                 } else if (cat == ZYDIS_CATEGORY_COND_BR || cat == ZYDIS_CATEGORY_UNCOND_BR) {
                     HandleBranch(context, insn, pc, function, bb, work);
                     bb = nullptr;
@@ -250,7 +260,7 @@ namespace ReWizard {
             auto target = pc + insn->Instruction().length + op0.imm.value.u;
             function->AddCallSite(pc, target);
             // Enqueue direct call target as a new function entry point
-            if (context->GetLoader()->IsWithinMapping(target) && !context->GetVisited().contains(target))
+            if (context->GetLoader()->IsWithinMapping(target) && !context->GetVisited().contains(target) && IsExecutableAddress(context->GetLoader(), target))
                 functionWork.push(target);
         } else if (op0.type == ZYDIS_OPERAND_TYPE_MEMORY && op0.mem.base == ZYDIS_REGISTER_RIP) {
             auto ripTarget = pc + insn->Instruction().length + op0.mem.disp.value;
@@ -275,7 +285,7 @@ namespace ReWizard {
 
         if (op0.type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
             auto target = pc + insn->Instruction().length + op0.imm.value.u;
-            if (context->GetLoader()->IsWithinMapping(target)) {
+            if (context->GetLoader()->IsWithinMapping(target) && IsExecutableAddress(context->GetLoader(), target)) {
                 if (!context->GetVisited().contains(target)) work.push(target);
                 bb->AddSuccessor(target);
             } else if (target < imgBase || target >= imgEnd) {
@@ -385,7 +395,7 @@ namespace ReWizard {
                 }
 
                 if (isPrologue) {
-                    if (!module->GetFunctionForAddress(addr)) {
+                    if (!module->GetFunctionForAddress(addr) && IsExecutableAddress(loader, addr)) {
                         functionWork.push(addr);
                         spdlog::debug("LinearSweepFallback: found potential prologue at 0x{:x}", addr);
                     }
@@ -408,7 +418,7 @@ namespace ReWizard {
             fn->SetEnd(pc);
 
             size_t insnCount = 0, stackModifier = 0;
-            AnalyzeFunction(context, fn, pc, &insnCount, &stackModifier, false);
+            AnalyzeFunction(context, fn, pc, &insnCount, &stackModifier, false, functionWork);
 
             for (auto& [src, dest] : fn->GetCallSites()) {
                 if (dest && !context->GetVisited().contains(dest)) {
