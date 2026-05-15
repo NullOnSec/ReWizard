@@ -49,6 +49,7 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
 - ✅ 3.1 Trace Infrastructure — `Hybrid/TraceRecord.h`, `ITraceReader.h`, `SimpleTraceReader` (JSON trace format)
 - ✅ 3.3 HybridAnalysisPass — consumes trace data, resolves indirect targets, clears disproven opaque predicates, marks hybrid-verified
 - ✅ 3.4 Hybrid/Static Iteration — `StaticControlFlowRebuilder::ReAnalyzeFrom()` called from HybridAnalysisPass
+- ✅ 3.7 SimpleTraceReader O(1) PC Lookup — unordered_map index, O(1) GetRecordsForPC()
 - ⏳ 3.5 Bochs Integration — IEmulator interface, BochsExecutor, snapshot management
 - ⏳ 3.6 UnicornExecutor (optional) — micro-execution fast-path with syscall service layer
 - ❌ 3.2 PANDAS Trace Recording Workflow — **REJECTED**: Linux-only, cannot run on Windows
@@ -64,25 +65,27 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
 
 ## Recommended Next Steps (in priority order)
 
-### 1. Pass Dependency System (P0 — Critical Bug Fix)
-- Add `RunAfter()` / `DependsOn()` to `BaseAnalysisPass`
-- Implement topological sort in `PassManager::RunAll`
-- Replace `std::map` storage with dependency-ordered vector
-- Test that all 6 passes actually execute and produce output
+### ✅ DONE — Pass Dependency System (P0 — Critical Bug Fix)
+- Added `Dependencies()` to `BaseAnalysisPass`, overridden by all 6 passes
+- Implemented Kahn's topological sort in `PassManager::RunAll()`
+- Passes now execute in correct dependency order
+- All 31 tests pass
 
-### 2. MemoryMapper Platform Abstraction
-- Extract `MemoryMapper` interface from `FileLoader` Win32 calls
-- Implement `Win32MemoryMapper` (VirtualAlloc/VirtualFree)
-- Implement `PosixMemoryMapper` (mmap/munmap) for Linux/macOS
-- `FileLoader` takes `MemoryMapper*` via constructor or factory
+### ✅ DONE — MemoryMapper Platform Abstraction
+- Extracted `MemoryMapper` interface with Map/Unmap/Zero methods
+- Implemented `Win32MemoryMapper` (VirtualAlloc/VirtualFree) and `PosixMemoryMapper` (mmap/munmap)
+- `FileLoader` takes `MemoryMapper` via constructor; auto-creates platform-specific impl
+- PosixMemoryMapper excluded from Windows build via CMake conditional
+- All 31 tests pass
 
-### 3. SimpleTraceReader O(1) PC Lookup
-- Add `unordered_map<uintptr_t, vector<size_t>>` index to `SimpleTraceReader`
-- Build index during `Load()`
-- `GetRecordsForPC()` becomes O(1) average case
+### ✅ DONE — SimpleTraceReader O(1) PC Lookup
+- Added `unordered_map<uintptr_t, vector<size_t>>` index built during `Load()`
+- `GetRecordsForPC()` now O(1) average case instead of O(n) linear scan
+- All 31 tests pass
 
-### 4. Bochs Integration Architecture
+### 1. Bochs Integration Architecture (NEXT MAJOR TASK)
 - Design `IEmulator` / `ITraceProducer` interface
+- Add Bochs as FetchContent/prebuilt dependency (LGPL v2.1)
 - `BochsExecutor` implementation:
   - VM lifecycle management (boot, snapshot, restore)
   - Instrumentation hooks (`bx_instr_before_execution`)
@@ -90,13 +93,13 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
   - Yield `TraceRecord`s compatible with existing `HybridAnalysisPass`
 - Snapshot format: CPU state + memory regions + device state
 
-### 5. UnicornExecutor (Optional Accelerator)
+### 2. UnicornExecutor (Optional Accelerator)
 - Encapsulate binspektor prototype as `UnicornExecutor` implementing `IEmulator`
 - Syscall service layer: table-driven NT syscall handlers (~25-30 common)
 - Only for simple micro-execution (arithmetic predicates, short code regions)
 - Falls back to Bochs for unhandled cases (future)
 
-### 6. Phase 4 Deobfuscation Passes
+### 3. Phase 4 Deobfuscation Passes
 - 4.2 DeobfuscationFlattenPass, 4.3 DeadCodeEliminationPass, 4.4 ConstantFoldingPass
 
 ## Files Recently Modified
