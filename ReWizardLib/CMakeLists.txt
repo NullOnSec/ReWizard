@@ -5,6 +5,7 @@
     "source/Analysis/Passes/AbstractInterpretationPass.cpp"
     "source/Analysis/Passes/HybridAnalysisPass.cpp"
     "source/Analysis/Passes/OpaquePredicatePass.cpp"
+    "source/Analysis/Passes/IRLiftingPass.cpp"
 )
 
 set(IR_SOURCES

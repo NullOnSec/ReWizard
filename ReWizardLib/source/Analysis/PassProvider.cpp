@@ -10,6 +10,7 @@
 #include <ReWizard/Analysis/Passes/AbstractInterpretationPass.h>
 #include <ReWizard/Analysis/Passes/HybridAnalysisPass.h>
 #include <ReWizard/Analysis/Passes/OpaquePredicatePass.h>
+#include <ReWizard/Analysis/Passes/IRLiftingPass.hpp>
 
 #include <spdlog/spdlog.h>
 
