@@ -2,6 +2,7 @@
     "source/Analysis/Passes/StaticControlFlowRebuilder.cpp"
     "source/Analysis/Passes/ImportAnalysisPass.cpp"
     "source/Analysis/Passes/DataFlowAnalysisPass.cpp"
+    "source/Analysis/Passes/AbstractInterpretationPass.cpp"
 )
 
 add_library(ReWizardLib STATIC

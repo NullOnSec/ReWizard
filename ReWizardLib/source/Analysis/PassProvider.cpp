@@ -7,6 +7,7 @@
 #include <ReWizard/Analysis/Passes/StaticControlFlowRebuilder.h>
 #include <ReWizard/Analysis/Passes/ImportAnalysisPass.h>
 #include <ReWizard/Analysis/Passes/DataFlowAnalysisPass.h>
+#include <ReWizard/Analysis/Passes/AbstractInterpretationPass.h>
 
 #include <spdlog/spdlog.h>
 

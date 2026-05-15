@@ -90,8 +90,11 @@ namespace ReWizard {
             size_t insnCount = 0, stackModifier = 0;
 
             AnalyzeFunction(context, fn, pc, &insnCount, &stackModifier, verbose);
-            if (insnCount && (fn->ContainsIndirectCalls() || fn->ContainsIndirectJumps())
-                && ((stackModifier * 100 / insnCount) > 30 || bypassHeur)) {
+            if (bypassHeur) {
+                fn->MarkForHybridAnalysis();
+            } else if (insnCount && (fn->ContainsIndirectCalls() || fn->ContainsIndirectJumps())) {
+                // Sound heuristic: if static analysis can't resolve targets,
+                // or if opaque predicates are detected, mark for hybrid analysis
                 fn->MarkForHybridAnalysis();
             }
 

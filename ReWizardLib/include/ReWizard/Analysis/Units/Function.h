@@ -136,6 +136,18 @@ namespace ReWizard {
 			markedForHybridAnalysis_ = true;
 		}
 
+		bool HasOpaquePredicates() const {
+			return hasOpaquePredicates_;
+		}
+
+		void SetHasOpaquePredicates(bool val) {
+			hasOpaquePredicates_ = val;
+		}
+
+		std::set<uintptr_t>& GetOpaquePredicateAddresses() {
+			return opaquePredicateAddresses_;
+		}
+
 		bool IsTrampoline() const {
 			return isTrampoline_;
 		}
@@ -173,8 +185,10 @@ namespace ReWizard {
 		std::vector<std::string> disassemblyCache_;
 		bool containsIndirectCalls_{ false }, containsIndirectJumps_{ false };
 		bool markedForHybridAnalysis_ = false;
+		bool hasOpaquePredicates_ = false;
 		bool disassemblyCached_ = false;
 		bool isTrampoline_ = false;
+		std::set<uintptr_t> opaquePredicateAddresses_;
 
 
 	};
