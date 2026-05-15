@@ -37,7 +37,7 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 ### 0.7 Remove dead Unicorn link from CLI
 - Remove `#include <unicorn/unicorn.h>` from `main.cpp`.
-- Remove `unicorn` from `ReWizardCLI` link deps (keep in `ReWizardLib` for now since it will be needed later).
+- Remove `unicorn` from `ReWizardCLI` link deps (keep in `ReWizardLib` for future use).
 
 ### 0.8 Fix O(n) function lookup
 - Add an interval map (e.g., `std::map<uintptr_t, Function*>` keyed by start address) to `Module` for `GetFunctionForAddress`.
@@ -107,27 +107,29 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 ---
 
-## Phase 3 — Hybrid Analysis with PANDAS
+## Phase 3 — Hybrid Analysis
 
-**Goal:** Implement dynamic analysis using PANDAS (Platform for Architecture-Neutral Dynamic Analysis) to replay execution traces and resolve targets that static analysis cannot.
+**Goal:** Implement dynamic analysis using execution traces to resolve targets that static analysis cannot. Bochs is the primary backend (full-system emulation); Unicorn is an optional accelerator for simple micro-execution.
 
-### 3.1 PANDAS Integration Layer
-- Add PANDAS as a git submodule or FetchContent dependency.
-- Create `Hybrid/PANDASRunner.h|.cpp` — wrapper to:
-  - Load a PANDAS replay recording.
-  - Extract instruction-level trace (PC, registers, memory accesses).
-  - Expose trace data to the analysis pipeline.
+### 3.1 Trace Infrastructure
+- `Hybrid/TraceRecord.h` — PC, registers, memory accesses.
+- `ITraceReader.h` — abstract interface for trace consumers.
+- `SimpleTraceReader` — JSON trace file reader.
+- Add indexed PC lookup (`unordered_map`) for O(1) queries.
 
-### 3.2 Trace Recording Workflow
-- Document the workflow for creating PANDAS replays:
-  - Boot a Windows VM with PANDAS.
-  - Load ntoskrnl using PANDAS OS introspection plugins.
-  - Use the NT loader to launch the target user-mode process.
-  - Record execution with `begin_record` / `end_record`.
+### 3.2 Bochs Integration
+- Add Bochs as a FetchContent or prebuilt dependency (LGPL v2.1).
+- Design `IEmulator` / `ITraceProducer` interface:
+  - `Boot()` — start VM
+  - `Snapshot()` / `Restore()` — save/load full VM state (CPU + memory + devices)
+  - `ExecuteFunction()` — run target function with instrumentation
+  - `GetTraceRecords()` — yield recorded instructions
+- `BochsExecutor` implementation using Bochs instrumentation callbacks (`bx_instr_before_execution`).
+- Snapshot strategy: boot once → save state → restore per analysis session.
 
 ### 3.3 HybridAnalysisPass
 - New `Analysis/Passes/HybridAnalysisPass.h|.cpp` (GenericPass).
-- Consumes PANDAS trace data.
+- Consumes trace data from `IEmulator` / `ITraceReader`.
 - Resolves indirect call/jump targets observed at runtime.
 - Updates `Function::callSites_` with resolved targets.
 - Removes opaque predicate markers from functions proven non-opaque by trace.
@@ -135,11 +137,18 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 ### 3.4 Hybrid/Static Iteration
 - After `HybridAnalysisPass` resolves indirect targets, re-run `StaticControlFlowRebuilder` on newly reachable code.
-- Add pass dependency tracking to `PassManager` so hybrid runs after static.
+- Add pass dependency tracking to `PassManager` so passes run in correct dependency order.
 
-### 3.5 Tests
-- Ship a small PANDAS recording fixture (or scripts to generate one).
+### 3.5 UnicornExecutor (Optional Accelerator)
+- Encapsulate binspektor prototype as `UnicornExecutor` implementing `IEmulator`.
+- Syscall service layer: table-driven NT syscall handlers (~25-30 common calls).
+- Only for simple micro-execution (arithmetic predicates, short code regions).
+- Falls back to `BochsExecutor` for unhandled cases.
+
+### 3.6 Tests
+- Ship a small trace recording fixture.
 - Test that `HybridAnalysisPass` correctly resolves indirect calls from trace data.
+- Test Bochs snapshot save/restore roundtrip.
 
 ---
 
@@ -182,7 +191,7 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 ### 5.1 Kernel Driver Analysis
 - Extend `FileLoader` to handle kernel-mode PE (no relocations, different section attributes).
-- Add `KernelAnalysisPass` that sets up kernel execution context in PANDAS.
+- Add `KernelAnalysisPass` that sets up kernel execution context in Bochs.
 
 ### 5.2 Multi-format Improvements
 - Improve ELF and MachO import/export handling in `ImportAnalysisPass`.
@@ -207,17 +216,21 @@ Phased roadmap for building out ReWizard from its current state. Each phase prod
 
 ## Dependency Notes
 
-- **PANDAS** will be integrated as a git submodule pointing to `https://github.com/panda-re/panda`. Build requires QEMU; only needed for hybrid analysis phases.
-- **Google Test** will be added via FetchContent for the test framework.
+- **Bochs** will be integrated as a FetchContent dependency or linked as a prebuilt library (LGPL v2.1). Required for Phase 3 hybrid analysis.
+- **Unicorn** remains linked in `ReWizardLib` for Phase 3.5 optional micro-execution accelerator.
+- **Google Test** added via FetchContent for the test framework.
 - All dependencies must be downloaded to `Z:` (not `C:`) per project policy.
-- Unicorn remains linked in `ReWizardLib` but is not used in any current pass; it may be removed in favor of PANDAS or kept as a lightweight inline emulator for future micro-execution passes.
+- **PANDAS** is explicitly **not used** — Linux-only host, cannot run on Windows.
 
 ## Architectural Decisions
 
 | Decision | Rationale |
 |----------|-----------|
 | Pass-based pipeline | Extensible, allows re-running passes after new info is discovered |
-| PANDAS over Unicorn | PANDAS provides full OS emulation + replay; Unicorn only emulates bare-metal CPU and requires manual environment setup |
+| Bochs primary backend | Full-system emulation — no API stubs needed, works on all host platforms. Snapshot mitigates boot time. |
+| Unicorn optional accelerator | Lightweight micro-execution for simple arithmetic predicates. Syscall service layer for common NT calls. Not the foundation — correctness from Bochs. |
+| No PANDAS | Linux-only host, cannot run on Windows. Cross-platform is a hard requirement. |
 | Boost.Graph for CFG | Already in use, well-tested, provides GraphViz output out of the box |
 | Zydis for disassembly | Best-in-class x86 decoder, v4 supports all modern ISA extensions |
 | Static auto-registration | Passes self-register via `PassRegistrar<T>` — no manual registry needed, just include the header |
+| Pass dependency system | `RunAfter()` / `DependsOn()` declarations with topological sort. Fixes critical bug where 4/6 passes silently no-op. |

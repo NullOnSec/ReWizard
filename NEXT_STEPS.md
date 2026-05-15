@@ -2,6 +2,35 @@
 
 Updated: 2026-05-15
 
+## Critical Bug Discovered
+
+**Pass execution order is broken.** Passes run in `std::map` order (alphabetical by name), causing 4 out of 6 passes to silently do nothing:
+
+| # | Current Order | Problem |
+|---|---|---|
+| 1 | `AbstractInterpretationPass` | **No-op** — iterates empty function list (CFG not built yet) |
+| 2 | `DataFlowAnalysisPass` | **No-op** — same reason |
+| 3 | `HybridAnalysisPass` | **No-op** — no functions are marked |
+| 4 | `ImportAnalysisPass` | Works (populates symbol table) |
+| 5 | `OpaquePredicatePass` | **No-op** — reads opaque predicate data never set |
+| 6 | `StaticControlFlowRebuilder` | Works (builds CFG) — but runs LAST |
+
+**Correct order:** ImportAnalysisPass → StaticControlFlowRebuilder → DataFlowAnalysisPass → AbstractInterpretationPass → OpaquePredicatePass → HybridAnalysisPass
+
+## Architecture Decisions Updated
+
+### Hybrid Engine: Bochs Primary, Unicorn Optional
+
+- **PANDAS is OUT** — Linux-only host, requires QEMU build, cannot run on Windows
+- **Bochs is IN as primary backend** — full-system emulation, no API stubs needed, works on Windows/Linux/macOS
+- **Unicorn is IN as optional accelerator** — for simple micro-execution (arithmetic predicates), with syscall service layer for common NT calls. Never the foundation.
+- **No Python scripts** — everything embedded in C++. No "record on Linux / analyze on Windows" workflow.
+- **Bochs snapshot strategy** — boot once, save CPU+memory state, restore for each analysis session
+
+### Bochs Rationale
+
+The binspektor prototype needed **20 hooks (13 unique implementations) just for hello-world**. Real binaries hit hundreds of APIs. The syscall service layer (~25-30 NT handlers) reduces this but is still a maintenance trap — complex syscalls like `NtAllocateVirtualMemory` have nuanced semantics, and CRT initialization, TLS callbacks, and SEH all need stubs. Bochs provides **correctness by default** with full OS emulation. Snapshot mitigates the boot-time penalty.
+
 ## What's Been Done
 
 **Phase 0 — Stabilization (COMPLETE):**
@@ -16,12 +45,13 @@ Updated: 2026-05-15
 - ✅ 2.3 Abstract Interpretation — interval/domain analysis, opaque predicate detection (test/cmp + jz/jnz/js/jns patterns)
 - ✅ 2.4 Output Generation — AnalysisResult with JSON/DOT/text export, CLI --output/--format flags
 
-**Phase 3 — Hybrid Analysis with PANDAS (COMPLETE):**
-- ✅ 3.1 PANDAS Integration Layer — `Hybrid/TraceRecord.h`, `ITraceReader.h`, `SimpleTraceReader` (JSON trace format)
-- ✅ 3.3 HybridAnalysisPass — consumes trace data, resolves indirect call/jump targets, clears disproven opaque predicates, marks functions hybrid-verified
-- ✅ 3.4 Hybrid/Static Iteration — `StaticControlFlowRebuilder::ReAnalyzeFrom()` called from HybridAnalysisPass on resolved targets; new functions discovered and tested
-- ⏳ 3.2 Trace Recording Workflow — document PANDAS replay creation (Windows VM, NT loader, begin_record/end_record)
-- ⏳ 3.5 Tests with real PANDAS recording fixture
+**Phase 3 — Hybrid Analysis (IN PROGRESS):**
+- ✅ 3.1 Trace Infrastructure — `Hybrid/TraceRecord.h`, `ITraceReader.h`, `SimpleTraceReader` (JSON trace format)
+- ✅ 3.3 HybridAnalysisPass — consumes trace data, resolves indirect targets, clears disproven opaque predicates, marks hybrid-verified
+- ✅ 3.4 Hybrid/Static Iteration — `StaticControlFlowRebuilder::ReAnalyzeFrom()` called from HybridAnalysisPass
+- ⏳ 3.5 Bochs Integration — IEmulator interface, BochsExecutor, snapshot management
+- ⏳ 3.6 UnicornExecutor (optional) — micro-execution fast-path with syscall service layer
+- ❌ 3.2 PANDAS Trace Recording Workflow — **REJECTED**: Linux-only, cannot run on Windows
 
 **Phase 4 — Deobfuscation (IN PROGRESS):**
 - ✅ 4.1 OpaquePredicatePass — removes dead successors from always-true/always-false branches, rebuilds CFG
@@ -34,22 +64,40 @@ Updated: 2026-05-15
 
 ## Recommended Next Steps (in priority order)
 
-### 1. Phase 4.2 — DeobfuscationFlattenPass
-- Pattern-match control-flow flattening dispatcher structures (switch-based state machines)
-- Reconstruct original control flow
-- Test against a flattened binary fixture
+### 1. Pass Dependency System (P0 — Critical Bug Fix)
+- Add `RunAfter()` / `DependsOn()` to `BaseAnalysisPass`
+- Implement topological sort in `PassManager::RunAll`
+- Replace `std::map` storage with dependency-ordered vector
+- Test that all 6 passes actually execute and produce output
 
-### 2. Phase 4.3 — DeadCodeEliminationPass
-- Remove unreachable basic blocks after OpaquePredicatePass has removed edges
-- Clean up functions with no reachable BBs
+### 2. MemoryMapper Platform Abstraction
+- Extract `MemoryMapper` interface from `FileLoader` Win32 calls
+- Implement `Win32MemoryMapper` (VirtualAlloc/VirtualFree)
+- Implement `PosixMemoryMapper` (mmap/munmap) for Linux/macOS
+- `FileLoader` takes `MemoryMapper*` via constructor or factory
 
-### 3. Phase 4.4 — ConstantFoldingPass
-- Evaluate constant expressions using AbstractInterpretationPass interval results
-- Simplify arithmetic identities (e.g., `xor rax, rax` → 0)
+### 3. SimpleTraceReader O(1) PC Lookup
+- Add `unordered_map<uintptr_t, vector<size_t>>` index to `SimpleTraceReader`
+- Build index during `Load()`
+- `GetRecordsForPC()` becomes O(1) average case
 
-### 4. Phase 3.2 — Trace Recording Workflow Documentation
-- Document how to create PANDAS replays in a Windows VM
-- Export trace to the JSON format `SimpleTraceReader` expects
+### 4. Bochs Integration Architecture
+- Design `IEmulator` / `ITraceProducer` interface
+- `BochsExecutor` implementation:
+  - VM lifecycle management (boot, snapshot, restore)
+  - Instrumentation hooks (`bx_instr_before_execution`)
+  - Breakpoint-driven execution (execute only target function)
+  - Yield `TraceRecord`s compatible with existing `HybridAnalysisPass`
+- Snapshot format: CPU state + memory regions + device state
+
+### 5. UnicornExecutor (Optional Accelerator)
+- Encapsulate binspektor prototype as `UnicornExecutor` implementing `IEmulator`
+- Syscall service layer: table-driven NT syscall handlers (~25-30 common)
+- Only for simple micro-execution (arithmetic predicates, short code regions)
+- Falls back to Bochs for unhandled cases (future)
+
+### 6. Phase 4 Deobfuscation Passes
+- 4.2 DeobfuscationFlattenPass, 4.3 DeadCodeEliminationPass, 4.4 ConstantFoldingPass
 
 ## Files Recently Modified
 
