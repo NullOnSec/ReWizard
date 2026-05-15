@@ -289,6 +289,9 @@ node_modules/
 .opencode/
 opencode.json
 
+# Reference prototype (not part of main project)
+binspektor-main/
+
 # Visual Studio 6 build log
 *.plg
 
