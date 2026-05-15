@@ -71,6 +71,11 @@ namespace ReWizard {
 			successors_.push_back(addr);
 		}
 
+		void RemoveSuccessor(uintptr_t addr) {
+			auto it = std::remove(successors_.begin(), successors_.end(), addr);
+			successors_.erase(it, successors_.end());
+		}
+
 		std::vector<uintptr_t>& GetSuccessors() {
 			return successors_;
 		}

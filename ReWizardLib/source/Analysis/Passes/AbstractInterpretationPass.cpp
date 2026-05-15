@@ -67,6 +67,7 @@ namespace ReWizard {
                 if (pred == PredicateResult::AlwaysTrue || pred == PredicateResult::AlwaysFalse) {
                     function->SetHasOpaquePredicates(true);
                     function->GetOpaquePredicateAddresses().insert(insn->Address());
+                    function->GetOpaquePredicateResults()[insn->Address()] = (pred == PredicateResult::AlwaysTrue);
                     spdlog::debug("AbstractInterpretationPass: detected opaque predicate at 0x{:x} ({})",
                                   insn->Address(),
                                   pred == PredicateResult::AlwaysTrue ? "always true" : "always false");

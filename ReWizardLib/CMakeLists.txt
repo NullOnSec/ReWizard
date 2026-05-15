@@ -4,6 +4,7 @@
     "source/Analysis/Passes/DataFlowAnalysisPass.cpp"
     "source/Analysis/Passes/AbstractInterpretationPass.cpp"
     "source/Analysis/Passes/HybridAnalysisPass.cpp"
+    "source/Analysis/Passes/OpaquePredicatePass.cpp"
 )
 
 add_library(ReWizardLib STATIC

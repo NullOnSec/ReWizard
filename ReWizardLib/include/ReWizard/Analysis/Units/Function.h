@@ -156,6 +156,11 @@ namespace ReWizard {
 			return opaquePredicateAddresses_;
 		}
 
+		// true = branch always taken, false = branch always not taken
+		std::map<uintptr_t, bool>& GetOpaquePredicateResults() {
+			return opaquePredicateResults_;
+		}
+
 		bool IsTrampoline() const {
 			return isTrampoline_;
 		}
@@ -193,11 +198,12 @@ namespace ReWizard {
 		std::vector<std::string> disassemblyCache_;
 		bool containsIndirectCalls_{ false }, containsIndirectJumps_{ false };
 		bool markedForHybridAnalysis_ = false;
-		bool hasOpaquePredicates_ = false;
 		bool hybridVerified_ = false;
+		bool hasOpaquePredicates_ = false;
 		bool disassemblyCached_ = false;
 		bool isTrampoline_ = false;
 		std::set<uintptr_t> opaquePredicateAddresses_;
+		std::map<uintptr_t, bool> opaquePredicateResults_;
 
 
 	};

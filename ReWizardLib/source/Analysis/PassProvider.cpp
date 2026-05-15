@@ -9,6 +9,7 @@
 #include <ReWizard/Analysis/Passes/DataFlowAnalysisPass.h>
 #include <ReWizard/Analysis/Passes/AbstractInterpretationPass.h>
 #include <ReWizard/Analysis/Passes/HybridAnalysisPass.h>
+#include <ReWizard/Analysis/Passes/OpaquePredicatePass.h>
 
 #include <spdlog/spdlog.h>
 
