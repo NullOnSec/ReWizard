@@ -285,6 +285,10 @@ FakesAssemblies/
 .ntvs_analysis.dat
 node_modules/
 
+# OpenCode local agent config
+.opencode/
+opencode.json
+
 # Visual Studio 6 build log
 *.plg
 
