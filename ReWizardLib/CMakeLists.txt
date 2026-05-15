@@ -40,7 +40,9 @@ if (EXISTS "$ENV{LLVM_DIR}")
     set(LLVM_DIR "$ENV{LLVM_DIR}" CACHE PATH "Path to LLVM installation")
 endif()
 
-if (EXISTS "Z:/llvm/lib/cmake/llvm")
+if (EXISTS "Z:/llvm-install/lib/cmake/llvm")
+    list(APPEND CMAKE_PREFIX_PATH "Z:/llvm-install/lib/cmake/llvm")
+elseif (EXISTS "Z:/llvm/lib/cmake/llvm")
     list(APPEND CMAKE_PREFIX_PATH "Z:/llvm/lib/cmake/llvm")
 endif()
 
@@ -51,15 +53,14 @@ if (LLVM_FOUND)
     target_include_directories(ReWizardLib SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
     target_link_libraries(ReWizardLib PUBLIC ${LLVM_LIBRARIES})
 else()
-    message(STATUS "LLVM not found, using source headers only")
+    message(WARNING "LLVM C++ libraries not found. IR layer will use forward declarations only.\n"
+                    "To enable full LLVM support, build LLVM first:\n"
+                    "  .\\scripts\\build-llvm.ps1\n"
+                    "Or set LLVM_DIR to an existing installation.")
     if (EXISTS "Z:/llvm-src/llvm/include")
         target_include_directories(ReWizardLib SYSTEM PUBLIC "Z:/llvm-src/llvm/include")
     endif()
 endif()
-
-# TODO: Link LLVM libraries when built for correct architecture
-# Currently LLVM-C.lib is x64 but target is x86
-# Build LLVM from source with matching architecture, then link here
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET ReWizardLib PROPERTY CXX_STANDARD 20)

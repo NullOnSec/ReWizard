@@ -21,11 +21,36 @@ ReWizard is a C++20 binary analysis framework for x86/x86_64 reverse engineering
 **IMPORTANT:** All build commands must run inside a Visual Studio Developer Command Prompt environment. Because each shell invocation starts a new process, you MUST chain the .bat and build commands together using `cmd /c`:
 
 ```bash
-cmd /c "call Z:\VS\VC\Auxiliary\Build\vcvarsamd64_x86.bat && cmake --preset x64-debug -DBOOST_ROOT=Z:/boost/boost_1_85_0"
-cmd /c "call Z:\VS\VC\Auxiliary\Build\vcvarsamd64_x86.bat && cmake --build out/build/x64-debug"
+cmd /c "call Z:\VS\VC\Auxiliary\Build\vcvars64.bat && cmake --preset x64-debug -DBOOST_ROOT=Z:/boost/boost_1_85_0"
+cmd /c "call Z:\VS\VC\Auxiliary\Build\vcvars64.bat && cmake --build out/build/x64-debug"
 ```
 
 The Debug preset expects Boost at `C:/boost/x64/debug`. Override with `-DBOOST_INSTALL=Z:/path/to/boost`.
+
+## LLVM Dependency
+
+ReWizard links against the LLVM C++ libraries. CMake searches the following locations automatically:
+
+1. `Z:/llvm-install/lib/cmake/llvm` (preferred — full C++ build)
+2. `Z:/llvm/lib/cmake/llvm` (fallback — C API only, headers-only mode)
+
+If neither is present, the IR layer falls back to forward declarations and stub implementations.
+
+**Building LLVM from source (one-time):**
+
+```powershell
+.\scripts\build-llvm.ps1
+```
+
+This clones LLVM 19.1.0, configures a minimal Release build (X86 target only), and installs to `Z:/llvm-install`. The script is idempotent.
+
+**Manual build:**
+
+```bash
+cmd /c "call Z:\VS\VC\Auxiliary\Build\vcvars64.bat && cmake -G Ninja -S Z:/llvm-project-19.1.0/llvm -B Z:/llvm-project-19.1.0/build -DCMAKE_BUILD_TYPE=Release -DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_BUILD_TOOLS=OFF -DLLVM_BUILD_TESTS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_ENABLE_BINDINGS=OFF -DLLVM_ENABLE_ZLIB=OFF -DLLVM_ENABLE_LIBXML2=OFF -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_OPTIMIZED_TABLEGEN=ON -DCMAKE_INSTALL_PREFIX=Z:/llvm-install -DLLVM_BUILD_LLVM_DYLIB=OFF -DLLVM_LINK_LLVM_DYLIB=OFF"
+cmd /c "call Z:\VS\VC\Auxiliary\Build\vcvars64.bat && cmake --build Z:/llvm-project-19.1.0/build"
+cmd /c "call Z:\VS\VC\Auxiliary\Build\vcvars64.bat && cmake --install Z:/llvm-project-19.1.0/build"
+```
 
 ## Testing
 
