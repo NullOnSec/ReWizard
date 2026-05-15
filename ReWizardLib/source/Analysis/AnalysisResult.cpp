@@ -91,8 +91,16 @@ namespace ReWizard {
         j["end"] = fn->GetEnd();
         j["is_trampoline"] = fn->IsTrampoline();
         j["marked_for_hybrid"] = fn->IsMarked();
+        j["hybrid_verified"] = fn->IsHybridVerified();
         j["contains_indirect_calls"] = fn->ContainsIndirectCalls();
         j["contains_indirect_jumps"] = fn->ContainsIndirectJumps();
+        j["has_opaque_predicates"] = fn->HasOpaquePredicates();
+
+        nlohmann::json opaquePreds = nlohmann::json::array();
+        for (auto addr : fn->GetOpaquePredicateAddresses()) {
+            opaquePreds.push_back(addr);
+        }
+        j["opaque_predicate_addresses"] = opaquePreds;
 
         nlohmann::json callSites = nlohmann::json::array();
         for (const auto& [src, dst] : fn->GetCallSites()) {
@@ -223,6 +231,10 @@ namespace ReWizard {
                 oss << "  [TRAMPOLINE]\n";
             if (fn["marked_for_hybrid"].get<bool>())
                 oss << "  [MARKED FOR HYBRID ANALYSIS]\n";
+            if (fn["hybrid_verified"].get<bool>())
+                oss << "  [HYBRID VERIFIED]\n";
+            if (fn["has_opaque_predicates"].get<bool>())
+                oss << "  [OPAQUE PREDICATES DETECTED]\n";
 
             for (const auto& line : fn["disassembly"]) {
                 oss << line.get<std::string>() << "\n";
