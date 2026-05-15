@@ -20,8 +20,14 @@ add_library(ReWizardLib STATIC
     "source/Analysis/PassProvider.cpp"
     "source/Analysis/AnalysisResult.cpp"
     "source/Hybrid/SimpleTraceReader.cpp"
+    "source/Memory/MemoryMapper.cpp"
+    "source/Memory/Win32MemoryMapper.cpp"
     ${PASS_SOURCES} # All passes included here
 )
+
+if (NOT WIN32)
+    target_sources(ReWizardLib PRIVATE "source/Memory/PosixMemoryMapper.cpp")
+endif()
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET ReWizardLib PROPERTY CXX_STANDARD 20)

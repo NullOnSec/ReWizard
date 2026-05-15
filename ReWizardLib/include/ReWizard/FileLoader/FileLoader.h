@@ -2,6 +2,7 @@
 #define FILE_LOADER_H
 
 #include <ReWizard/Disassembler/Disassembler.h>
+#include <ReWizard/Memory/MemoryMapper.h>
 #include <LIEF/Abstract.hpp>
 #include <string>
 #include <span>
@@ -40,7 +41,7 @@ namespace ReWizard {
 
     class FileLoader {
     public:
-        static std::unique_ptr<FileLoader> Create(const std::string& name);
+        static std::unique_ptr<FileLoader> Create(const std::string& name, std::unique_ptr<MemoryMapper> mapper = nullptr);
         ~FileLoader();
 
         bool Load(bool executable = false);
@@ -71,7 +72,7 @@ namespace ReWizard {
         std::vector<std::pair<uintptr_t, uintptr_t>> GetExecutableSections() const;
 
     private:
-        FileLoader(const std::string& name);
+        FileLoader(const std::string& name, std::unique_ptr<MemoryMapper> mapper);
         bool LoadSections();
         void ApplyRelocations();
 
@@ -89,6 +90,7 @@ namespace ReWizard {
         uint8_t*                        m_mappedPtr{ nullptr };
         FileLoaderStatus                m_status = FileLoaderStatus::Success;
         ArchPair                        m_arch{ InvalidArchPair };
+        std::unique_ptr<MemoryMapper>   m_mapper;
     };
 
 }

@@ -12,14 +12,13 @@
 
 #include <spdlog/spdlog.h>
 
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-
 namespace ReWizard {
 
-    std::unique_ptr<FileLoader> FileLoader::Create(const std::string& name) {
-        auto instance = std::unique_ptr<FileLoader>(new FileLoader(name));
+    std::unique_ptr<FileLoader> FileLoader::Create(const std::string& name, std::unique_ptr<MemoryMapper> mapper) {
+        if (!mapper)
+            mapper = MemoryMapper::Create();
+
+        auto instance = std::unique_ptr<FileLoader>(new FileLoader(name, std::move(mapper)));
 
         if (instance && instance->Status() != FileLoaderStatus::Success)
             return nullptr;
@@ -27,7 +26,8 @@ namespace ReWizard {
         return instance;
     }
 
-    FileLoader::FileLoader(const std::string& name) : m_targetName(name) {
+    FileLoader::FileLoader(const std::string& name, std::unique_ptr<MemoryMapper> mapper)
+        : m_targetName(name), m_mapper(std::move(mapper)) {
         std::ifstream file(name, std::ios::binary | std::ios::ate);
         if (!file.is_open()) {
             m_status = FileLoaderStatus::FileOpenError;
@@ -56,8 +56,8 @@ namespace ReWizard {
     }
 
     FileLoader::~FileLoader() {
-        if (m_mappedPtr) {
-            VirtualFree(m_mappedPtr, 0, MEM_RELEASE);
+        if (m_mappedPtr && m_mapper) {
+            m_mapper->Unmap(m_mappedPtr, m_mappedSize);
             m_mappedPtr = nullptr;
         }
     }
@@ -86,18 +86,14 @@ namespace ReWizard {
         auto hdr = m_target->header();
 
         // Allocate memory for the entire binary
-        m_mappedPtr = (uint8_t*)VirtualAlloc(reinterpret_cast<LPVOID>(base), m_mappedSize, MEM_RESERVE | MEM_COMMIT, exec ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE);
+        m_mappedPtr = m_mapper->Map(m_mappedSize, base, exec);
         if (!m_mappedPtr) {
-            // If allocation at preferred base fails, try to allocate at any address
-            m_mappedPtr = (uint8_t*)VirtualAlloc(0, m_mappedSize, MEM_RESERVE | MEM_COMMIT, exec ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE);
-            if (!m_mappedPtr) {
-                spdlog::error("Unable to allocate {} bytes for target {}", m_mappedSize, Name());
-                m_status = FileLoaderStatus::AllocationError;
-                return false;
-            }
+            spdlog::error("Unable to allocate {} bytes for target {}", m_mappedSize, Name());
+            m_status = FileLoaderStatus::AllocationError;
+            return false;
         }
 
-        ZeroMemory(m_mappedPtr, m_mappedSize);
+        m_mapper->Zero(m_mappedPtr, m_mappedSize);
 
         m_mappedSpan = std::span<uint8_t>(m_mappedPtr, m_mappedSize);
 
@@ -112,7 +108,7 @@ namespace ReWizard {
         memcpy(m_mappedSpan.data(), m_raw.data(), header_size_opt.value());
 
         if (!LoadSections()) {
-            VirtualFree(m_mappedPtr, 0, MEM_RELEASE);
+            m_mapper->Unmap(m_mappedPtr, m_mappedSize);
             m_mappedPtr = nullptr;
             m_status = FileLoaderStatus::SectionLoaderError;
             spdlog::error("Fatal error mapping target sections into memory!");
