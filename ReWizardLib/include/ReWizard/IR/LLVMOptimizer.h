@@ -21,7 +21,8 @@ namespace ReWizard {
 
         // Run the specified optimization level on the module.
         // Returns true on success.
-        static bool Run(llvm::Module* module, Level level = Level::O2);
+        // If dumpBefore is true, writes the unoptimized IR to a file before running passes.
+        static bool Run(llvm::Module* module, Level level = Level::O2, bool dumpBefore = false);
 
         // Dump the module IR to a string.
         static std::string DumpIR(llvm::Module* module);

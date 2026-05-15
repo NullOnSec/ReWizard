@@ -18,10 +18,11 @@
 
 namespace ReWizard {
 
-    bool LLVMOptimizer::Run(llvm::Module* module, Level level) {
+    bool LLVMOptimizer::Run(llvm::Module* module, Level level, bool dumpBefore) {
 #ifndef REWIZARD_LLVM_ENABLED
         (void)module;
         (void)level;
+        (void)dumpBefore;
         spdlog::warn("LLVMOptimizer::Run: LLVM not enabled");
         return false;
 #else
@@ -31,6 +32,17 @@ namespace ReWizard {
         }
 
         spdlog::debug("LLVMOptimizer: running optimization level {}", static_cast<int>(level));
+
+        if (dumpBefore) {
+            std::error_code ec;
+            llvm::raw_fd_ostream out("rewizard_pre_opt.ll", ec);
+            if (!ec) {
+                module->print(out, nullptr);
+                spdlog::info("LLVMOptimizer: dumped pre-optimization IR to rewizard_pre_opt.ll");
+            } else {
+                spdlog::warn("LLVMOptimizer: failed to dump pre-optimization IR: {}", ec.message());
+            }
+        }
 
         llvm::LoopAnalysisManager LAM;
         llvm::FunctionAnalysisManager FAM;

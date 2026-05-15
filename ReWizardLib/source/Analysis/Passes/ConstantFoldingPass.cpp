@@ -73,7 +73,7 @@ namespace ReWizard {
         }
 
         spdlog::info("ConstantFoldingPass: running LLVM optimization on module with {} lifted blocks", liftedBlocks);
-        bool ok = LLVMOptimizer::Run(llvmModule, LLVMOptimizer::Level::O2);
+        bool ok = LLVMOptimizer::Run(llvmModule, LLVMOptimizer::Level::O2, true);
         if (!ok) {
             spdlog::warn("ConstantFoldingPass: LLVM optimization failed");
         }
