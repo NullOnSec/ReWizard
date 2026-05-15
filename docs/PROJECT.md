@@ -35,7 +35,7 @@ Binary bytes ──(remill)──► LLVM IR ──(LLVM opts / custom passes)�
 ```
 
 - **remill** lifts x86/x86_64 binary instructions to LLVM IR — makes all side-effects explicit (register writes, memory stores, condition flags)
-- **LLVM optimizer passes** provide battle-tested constant propagation (SCCP), dead code elimination (DCE), CFG simplification, and global value numbering (GVN)
+- **LLVM optimizer passes** — full pipeline: `SCCP → DCE → SimplifyCFG → InstCombine → GlobalDCE`. All passes now working. `GlobalDCE` removes dead internal functions after optimization.
 - **Custom ReWizard passes** operate on LLVM IR for CFF unflattening, opaque predicate simplification, and deobfuscation-specific transformations
 - **LLVM X86 backend** emits correct machine code — handles x86 encoding complexity (prefixes, ModRM, VEX/EVEX, REX.W) so we don't have to
 
@@ -49,6 +49,8 @@ Binary bytes ──(remill)──► LLVM IR ──(LLVM opts / custom passes)�
 |-------------------------|---------------|---------------------------|--------|
 | ImportAnalysisPass      | PEPass        | (none)                    | Working |
 | StaticControlFlowRebuilder | GenericPass | ImportAnalysisPass        | Working |
+| IRLiftingPass           | GenericPass   | StaticControlFlowRebuilder | Working |
+| ConstantFoldingPass     | GenericPass   | IRLiftingPass              | Working |
 | DataFlowAnalysisPass    | GenericPass   | StaticControlFlowRebuilder | Working |
 | AbstractInterpretationPass | GenericPass | StaticControlFlowRebuilder | Working |
 | OpaquePredicatePass     | GenericPass   | AbstractInterpretationPass | Working |
@@ -105,7 +107,7 @@ Requires MSVC + Ninja. Boost must be at `C:/boost/x64/{debug,release}` or overri
 8. **Hardcoded CLI path** — `main.cpp:11` has a local absolute path.
 9. **WHOLEARCHIVE CMake** — the per-pass `/WHOLEARCHIVE` logic uses incomplete object paths.
 10. ~~**No test infrastructure**~~ — Google Test framework present, 37 tests passing.
-11. ~~**P0: ConstantFoldingPass crash (0xc0000005)**~~ — **FIXED.** Root cause was `SimplifyCFGPass` and `InstCombinePass` crashing on lifted IR with thousands of orphan functions. Bisection confirmed safe passes: `SCCPPass` + `DCEPass`. Unsafe passes: `SimplifyCFGPass`, `InstCombinePass`. Fix: (a) single shared `llvm::Module` with proper DataLayout/TargetTriple; (b) `ConstantFoldingPass` runs optimization once per module instead of per-BB; (c) safe explicit pipeline replaces `buildPerModuleDefaultPipeline(O2)`. All 35 tests pass.
+11. ~~**P0: ConstantFoldingPass crash (0xc0000005)**~~ — **FIXED.** Root cause was `SimplifyCFGPass` and `InstCombinePass` crashing on orphan functions with `ExternalLinkage`. Fix: (a) single shared `llvm::Module` with proper DataLayout/TargetTriple; (b) `ConstantFoldingPass` runs optimization once per module; (c) functions use `InternalLinkage` so `GlobalDCEPass` can remove dead ones; (d) safe explicit pipeline `SCCP → DCE → SimplifyCFG → InstCombine → GlobalDCE`; (e) `verifyModule()` validation before and after optimization. All 37 tests pass.
 
 ### Project Database & Interactive UI (Phase 6)
 

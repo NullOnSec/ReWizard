@@ -1,16 +1,10 @@
 # Next Session Plan
 
-Updated: 2026-05-15
+Updated: 2026-05-16
 
 ## P0 BUG: ConstantFoldingPass Crash (0xc0000005 / Access Violation)
 
 ### Status: FIXED
-
-### Symptoms
-
-Running the full pipeline (IRLiftingPass -> ConstantFoldingPass) on `test_pe.exe` crashed
-with `SEH exception 0xc0000005` inside `ConstantFoldingPass::Run()`, immediately when
-`LLVMOptimizer::Run(llvmModule, O2)` was called.
 
 ### Root Cause Analysis
 
@@ -27,12 +21,10 @@ with `SEH exception 0xc0000005` inside `ConstantFoldingPass::Run()`, immediately
 
 3. **LLVM `buildPerModuleDefaultPipeline(O2)` crashed on orphan functions.**
    The full O2 pipeline includes `SimplifyCFGPass` and `InstCombinePass`, both of which
-   crash with 0xc0000005 when run on modules containing thousands of tiny orphan
-   functions (no callers, no entry point).
+   crashed with 0xc0000005 when run on modules containing thousands of tiny orphan
+   functions (no callers, no entry point) with `ExternalLinkage`.
 
 ### Pass Bisection Results
-
-Systematic testing with empty vs single-pass FPM on the full test binary:
 
 | Pass | Result |
 |------|--------|
@@ -42,45 +34,58 @@ Systematic testing with empty vs single-pass FPM on the full test binary:
 | `llvm::SimplifyCFGPass` | **CRASH (0xc0000005)** |
 | `llvm::InstCombinePass` | **CRASH (0xc0000005)** |
 
-**Safe pipeline:** `SCCPPass -> DCEPass` (constant propagation + dead code elimination)
-
 ### Fix Applied
 
 1. **`Lifter(bool is64Bit)`** — sets DataLayout and TargetTriple in constructor
 2. **`IRLiftingPass`** — uses single `std::unique_ptr<Lifter> lifter_` instead of vector
 3. **`ConstantFoldingPass`** — finds module once, runs `LLVMOptimizer::Run()` once
-4. **`LLVMOptimizer`** — replaced `buildPerModuleDefaultPipeline(O2)` with explicit
-   `FunctionPassManager` containing `SCCPPass` + `DCEPass`
+4. **`LLVMOptimizer`** — replaced `buildPerModuleDefaultPipeline(O2)` with explicit pipeline
+5. **`Lifter::LiftBasicBlock`** — changed `ExternalLinkage` to `InternalLinkage` so `GlobalDCEPass` can remove dead functions
+6. **`LLVMOptimizer`** — added `verifyModule()` before and after optimization
+7. **`LLVMOptimizer`** — enabled `SimplifyCFGPass`, `InstCombinePass`, `GlobalDCEPass` in pipeline
 
-### Test Expectations After Fix
+**Full pipeline: `SCCP → DCE → SimplifyCFG → InstCombine → GlobalDCE`**
 
-- `CFGRecoveryTest.BasicBlocksExistInFunctions` passes without access violation
-- `ConstantFoldingPass` runs in <1s (single pass on one module)
-- All 35 tests pass (2 skipped)
+All 37 tests pass (2 skipped).
+
+---
+
+## CFG Recovery Bugs Fixed
+
+### Mega-Function Bug (HandleCall)
+`HandleCall` was pushing direct call targets into local `work` queue instead of outer `functionWork` queue, causing callees to be recursively inlined into the caller. Fixed by threading `functionWork` through `AnalyzeFunction → HandleCall`.
+
+### IAT Entry Point Bug
+`CollectEntryPoints` was adding IAT slot addresses (data-section pointers) as function entry points, producing garbage functions. Removed the import-IAT loop.
+
+### Executable-Section Guards
+`IsExecutableAddress()` helper checks `IMAGE_SCN_MEM_EXECUTE` / `SHF_EXECINSTR` before creating functions or enqueuing targets.
+
+### GetFunctionForAddress Off-By-One
+Changed `address <= fn->GetEnd()` to `address < fn->GetEnd()` (exclusive end).
+
+### JMP Tail-Call Detection
+Unconditional JMPs to known function starts now record a call site instead of inlining. Unknown JMP targets are pushed to both `work` and `functionWork`. Prevents tail-call inlining for known functions while remaining conservative for undiscovered targets.
 
 ---
 
 ## Architecture Decisions Updated
 
-### Hybrid Engine: Bochs Primary, Unicorn Optional
+### LLVM Optimization Pipeline
+- **Full pipeline enabled**: `SCCP → DCE → SimplifyCFG → InstCombine → GlobalDCE`
+- **InternalLinkage**: All lifted functions use `InternalLinkage` so `GlobalDCEPass` can remove orphans
+- **verifyModule()**: IR validation before and after optimization catches malformed IR early
 
+### Hybrid Engine: Bochs Primary, Unicorn Optional
 - **PANDAS is OUT** — Linux-only host, requires QEMU build, cannot run on Windows
-- **Bochs is IN as primary backend** — full-system emulation, no API stubs needed, works on Windows/Linux/macOS
-- **Unicorn is IN as optional accelerator** — for simple micro-execution (arithmetic predicates), with syscall service layer for common NT calls. Never the foundation.
-- **No Python scripts** — everything embedded in C++. No "record on Linux / analyze on Windows" workflow.
-- **Bochs snapshot strategy** — boot once, save CPU+memory state, restore for each analysis session
+- **Bochs is IN as primary backend** — full-system emulation, no API stubs needed
+- **Unicorn is IN as optional accelerator** — for simple micro-execution
+- **No Python scripts** — everything embedded in C++
 
 ### IR: LLVM IR (manual lifter for now, remill planned)
-
-- **Single IR, single toolchain** — LLVM IR for everything: lifting, analysis, optimization, code emission
-- **Manual Zydis+IRBuilder lifter** currently lifts MOV, ADD, SUB, XOR, NOP, RET to LLVM IR
-- **remill** (Trail of Bits) planned for comprehensive x86 semantics — blocked on build integration
-- **LLVM optimizer passes** provide constant propagation (SCCP) and dead code elimination (DCE)
-- **LLVM X86 backend** planned for binary patching (code emission)
-
-### Bochs Rationale
-
-The binspektor prototype needed **20 hooks (13 unique implementations) just for hello-world**. Real binaries hit hundreds of APIs. The syscall service layer (~25-30 NT handlers) reduces this but is still a maintenance trap. Bochs provides **correctness by default** with full OS emulation. Snapshot mitigates the boot-time penalty.
+- **Single IR, single toolchain** — LLVM IR for everything
+- **Manual Zydis+IRBuilder lifter** currently lifts MOV, ADD, SUB, XOR, NOP, RET
+- **remill** (Trail of Bits) planned for comprehensive x86 semantics
 
 ## What's Been Done
 
@@ -88,7 +93,7 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
 - Fixed Win32InternalTypes.hpp, AnalysisManager UB, PassManager threading, CMake WHOLEARCHIVE, CLI arguments, tests
 
 **Phase 1 — Import/Export Analysis (COMPLETE):**
-- SymbolTable, ImportAnalysisPass (PE), symbol annotations in disassembly, PE relocation fixups, tests
+- SymbolTable, ImportAnalysisPass (PE), symbol annotations, PE relocation fixups, tests
 
 **Phase 2 — Improved Static Analysis (COMPLETE):**
 - Recursive descent disassembly, data flow analysis, abstract interpretation, opaque predicate detection, output generation
@@ -102,8 +107,9 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
 - LLVM 19.1.0 built from source, C++ libraries linked
 - Manual Lifter (Zydis + IRBuilder) lifts MOV, ADD, SUB, XOR, NOP, RET
 - IRLiftingPass auto-registered, lifts all basic blocks into single shared module
-- ConstantFoldingPass runs safe SCCP+DCE pipeline
-- **FIXED**: Crash resolved via pass bisection and safe pipeline
+- ConstantFoldingPass runs full optimization pipeline: SCCP → DCE → SimplifyCFG → InstCombine → GlobalDCE
+- **FIXED**: Crash resolved via `InternalLinkage` + `GlobalDCEPass` + `verifyModule()`
+- **FIXED**: CFG recovery bugs (mega-function, IAT entry points, off-by-one, tail-call detection)
 
 **Phase 6 — UI/Database:** Not started
 
@@ -111,27 +117,21 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
 
 **x64 PE > x86 PE > Linux ELF > Mach-O**
 
-All test fixtures, primary development, and optimization effort target x64 PE first. x86 PE is supported secondarily. Linux ELF and Mach-O are tertiary/last priorities and are explicitly deferred until x64/x86 PE are fully functional.
-
 ## Recommended Next Steps (in priority order)
 
 ### 1. Expand Lifter Instruction Coverage
 
 Add: PUSH, POP, CALL, JMP, CMP, conditional branches (JZ, JNZ, JG, JL, etc.), memory load/store (MOV r/m, LEA), TEST, AND, OR, SHL, SHR, NEG, NOT, MUL, DIV. Handle flags via a separate flags register in the alloca array.
 
-### 2. Investigate SimplifyCFG/InstCombine Crash
+### 2. Bochs Integration
 
-The crash in `SimplifyCFGPass` and `InstCombinePass` suggests our lifted IR contains
-an invalid construct that these passes trip over. Possible causes:
-- `ret void` in functions with no callers (orphan functions)
-- `alloca` of `i64[16]` array with GEP indices that confuse SROA/SimplifyCFG
-- Missing `noundef` or other attributes expected by the New Pass Manager
+Design `IEmulator` interface, `BochsExecutor` with snapshot management, instrumentation hooks.
 
-Debug approach: dump the LLVM IR of the module before optimization, then use
-`opt -passes=simplifycfg` on the IR file to see if it crashes standalone.
-If so, bisect which function causes the crash by deleting functions until it passes.
+### 3. remill Integration (long-term)
 
-### 3. Selective Lifting Scorer
+Replace manual lifter with remill for comprehensive x86/x86_64 semantics. Requires remill build integration.
+
+### 4. Selective Lifting Scorer
 
 Design a heuristic scorer that marks functions as "needs IR lifting" based on:
 - Opaque predicate density (from AbstractInterpretationPass)
@@ -139,25 +139,32 @@ Design a heuristic scorer that marks functions as "needs IR lifting" based on:
 - Code entropy (obfuscation indicator)
 - Function size vs. complexity ratio
 
-### 4. Bochs Integration
+### 5. O(n) Function Lookup
 
-Design `IEmulator` interface, `BochsExecutor` with snapshot management, instrumentation hooks.
+Replace linear scan in `Module::GetFunctionForAddress` with an interval tree or sorted vector + binary search.
 
-### 5. remill Integration (long-term)
+## Known Issues / Limitations
 
-Replace manual lifter with remill for comprehensive x86/x86_64 semantics. Requires remill build integration.
+- **JMP tail calls to undiscovered functions**: If a JMP target hasn't been discovered as a function yet, it will be inlined into the current function. Only JMPs to already-known function starts are correctly treated as tail calls.
+- **Debug builds blocked**: LLVM built with `/MD` (Release CRT), project Debug uses `/MDd`. Use `x64-release` preset only.
+- **`sub_1400021b0`**: Found by `LinearSweepFallback` in merged section — not a real function but passes exec check.
+- **Duplicate type definitions** in `Win32InternalTypes.hpp` — lines 343-667 duplicate lines 7-331.
+- **Thread safety** in `PassManager::RunAllAsync` — detached thread + `std::promise` lifetime risk.
+- **O(n) function lookup** — `Module::GetFunctionForAddress` is a linear scan.
+- **Hardcoded CLI path** — `main.cpp:11` has a local absolute path.
+- **WHOLEARCHIVE CMake** — the per-pass logic uses incomplete object paths.
 
 ## Key Files
 
-- `ReWizardLib/source/IR/Lifter.cpp` — Manual lifter (Zydis + IRBuilder), shared module
-- `ReWizardLib/include/ReWizard/IR/Lifter.h` — Lifter interface
+- `ReWizardLib/source/IR/Lifter.cpp` — Manual lifter (Zydis + IRBuilder), shared module, `InternalLinkage`
+- `ReWizardLib/source/IR/LLVMOptimizer.cpp` — Full pipeline: SCCP → DCE → SimplifyCFG → InstCombine → GlobalDCE, `verifyModule()`
 - `ReWizardLib/source/IR/IRBlock.cpp` — IRBlock wrapper (holds raw `llvm::BasicBlock*`)
-- `ReWizardLib/source/IR/LLVMOptimizer.cpp` — LLVM New Pass Manager wrapper (safe SCCP+DCE pipeline)
 - `ReWizardLib/source/Analysis/Passes/IRLiftingPass.cpp` — Creates single shared Lifter
-- `ReWizardLib/include/ReWizard/Analysis/Passes/IRLiftingPass.hpp` — Pass header
 - `ReWizardLib/source/Analysis/Passes/ConstantFoldingPass.cpp` — Runs optimization once on shared module
-- `ReWizardLib/source/Analysis/PassProvider.cpp` — Pass auto-registration
-- `ReWizardLib/source/Analysis/PassManager.cpp` — Topological sort and execution
+- `ReWizardLib/source/Analysis/Passes/StaticControlFlowRebuilder.cpp` — CALL fix, IAT removal, exec-section guards, JMP tail-call detection
+- `ReWizardLib/include/ReWizard/Analysis/Passes/StaticControlFlowRebuilder.h` — Updated `HandleBranch` and `AnalyzeFunction` signatures
+- `ReWizardLib/source/Analysis/Units/Module.cpp` — `GetFunctionForAddress` exclusive-end fix
+- `tests/test_cfg.cpp` — NoMegaFunctions, FunctionsAreNotInlined regression tests
 - `scripts/build-llvm.ps1` — Idempotent LLVM 19.1.0 build script
 
 ## Build Reminders
