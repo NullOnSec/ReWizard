@@ -6,11 +6,13 @@
     "source/Analysis/Passes/HybridAnalysisPass.cpp"
     "source/Analysis/Passes/OpaquePredicatePass.cpp"
     "source/Analysis/Passes/IRLiftingPass.cpp"
+    "source/Analysis/Passes/ConstantFoldingPass.cpp"
 )
 
 set(IR_SOURCES
     "source/IR/Lifter.cpp"
     "source/IR/IRBlock.cpp"
+    "source/IR/LLVMOptimizer.cpp"
 )
 
 add_library(ReWizardLib STATIC
@@ -55,7 +57,7 @@ if (LLVM_FOUND)
     # Map required components to actual library targets
     llvm_map_components_to_libnames(LLVM_REQ_LIBS
         Core Support IRReader X86Info X86Desc X86CodeGen X86AsmParser
-        Analysis TransformUtils ScalarOpts InstCombine
+        Analysis TransformUtils ScalarOpts InstCombine Passes
     )
     target_link_libraries(ReWizardLib PUBLIC ${LLVM_REQ_LIBS})
 else()

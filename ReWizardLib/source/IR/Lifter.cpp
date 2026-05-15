@@ -22,12 +22,35 @@ namespace ReWizard {
 
     class Lifter::Impl {
     public:
-        std::unique_ptr<llvm::LLVMContext> context;
-        std::unique_ptr<llvm::Module> module;
+        std::unique_ptr<llvm::LLVMContext> ownedContext;
+        std::unique_ptr<llvm::Module> ownedModule;
+        llvm::LLVMContext& context;
+        llvm::Module& module;
 
-        Impl() {
-            context = std::make_unique<llvm::LLVMContext>();
-            module = std::make_unique<llvm::Module>("rewizard_lift", *context);
+        Impl()
+            : ownedContext(std::make_unique<llvm::LLVMContext>()),
+              ownedModule(std::make_unique<llvm::Module>("rewizard_lift", *ownedContext)),
+              context(*ownedContext),
+              module(*ownedModule) {
+            SetDefaults(module, true);
+        }
+
+        explicit Impl(bool is64Bit)
+            : ownedContext(std::make_unique<llvm::LLVMContext>()),
+              ownedModule(std::make_unique<llvm::Module>("rewizard_lift", *ownedContext)),
+              context(*ownedContext),
+              module(*ownedModule) {
+            SetDefaults(module, is64Bit);
+        }
+
+        static void SetDefaults(llvm::Module& mod, bool is64Bit) {
+            if (is64Bit) {
+                mod.setDataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
+                mod.setTargetTriple("x86_64-pc-windows-msvc");
+            } else {
+                mod.setDataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
+                mod.setTargetTriple("i686-pc-windows-msvc");
+            }
         }
     };
 
@@ -88,6 +111,8 @@ namespace ReWizard {
 
     Lifter::Lifter() : impl_(std::make_unique<Impl>()) {}
 
+    Lifter::Lifter(bool is64Bit) : impl_(std::make_unique<Impl>(is64Bit)) {}
+
     Lifter::~Lifter() = default;
 
     Lifter::Lifter(Lifter&& other) noexcept = default;
@@ -107,8 +132,8 @@ namespace ReWizard {
         spdlog::debug("Lifter: LLVM not enabled, stub lift of basic block at 0x{:x} ({} bytes)", opts.baseAddress, len);
         return result;
 #else
-        auto& ctx = *impl_->context;
-        auto& mod = *impl_->module;
+        auto& ctx = impl_->context;
+        auto& mod = impl_->module;
 
         auto* int64Ty = llvm::Type::getInt64Ty(ctx);
         auto* int32Ty = llvm::Type::getInt32Ty(ctx);
@@ -291,7 +316,7 @@ namespace ReWizard {
 
     llvm::Module* Lifter::GetModule() const {
 #ifdef REWIZARD_LLVM_ENABLED
-        return impl_->module.get();
+        return &impl_->module;
 #else
         return nullptr;
 #endif
@@ -299,7 +324,7 @@ namespace ReWizard {
 
     llvm::LLVMContext* Lifter::GetContext() const {
 #ifdef REWIZARD_LLVM_ENABLED
-        return impl_->context.get();
+        return &impl_->context;
 #else
         return nullptr;
 #endif
@@ -307,12 +332,9 @@ namespace ReWizard {
 
     std::string Lifter::DumpModule() const {
 #ifdef REWIZARD_LLVM_ENABLED
-        if (!impl_->module) {
-            return "; ModuleID = 'rewizard_lift'\nsource_filename = \"rewizard_lift\"\n";
-        }
         std::string str;
         llvm::raw_string_ostream os(str);
-        impl_->module->print(os, nullptr);
+        impl_->module.print(os, nullptr);
         return str;
 #else
         return "; ModuleID = 'rewizard_lift'\nsource_filename = \"rewizard_lift\"\n";

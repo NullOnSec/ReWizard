@@ -11,6 +11,7 @@
 #include <ReWizard/Analysis/Passes/HybridAnalysisPass.h>
 #include <ReWizard/Analysis/Passes/OpaquePredicatePass.h>
 #include <ReWizard/Analysis/Passes/IRLiftingPass.hpp>
+#include <ReWizard/Analysis/Passes/ConstantFoldingPass.hpp>
 
 #include <spdlog/spdlog.h>
 

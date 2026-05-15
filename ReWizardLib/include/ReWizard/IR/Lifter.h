@@ -29,6 +29,7 @@ namespace ReWizard {
         };
 
         Lifter();
+        explicit Lifter(bool is64Bit);
         ~Lifter();
 
         // Non-copyable, movable

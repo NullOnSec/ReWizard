@@ -104,7 +104,8 @@ Requires MSVC + Ninja. Boost must be at `C:/boost/x64/{debug,release}` or overri
 7. ~~**FileLoader Win32-only**~~ — **FIXED:** `MemoryMapper` interface with `Win32MemoryMapper` / `PosixMemoryMapper`.
 8. **Hardcoded CLI path** — `main.cpp:11` has a local absolute path.
 9. **WHOLEARCHIVE CMake** — the per-pass `/WHOLEARCHIVE` logic uses incomplete object paths.
-10. ~~**No test infrastructure**~~ — Google Test framework present, 31 tests passing.
+10. ~~**No test infrastructure**~~ — Google Test framework present, 37 tests passing.
+11. ~~**P0: ConstantFoldingPass crash (0xc0000005)**~~ — **FIXED.** Root cause was `SimplifyCFGPass` and `InstCombinePass` crashing on lifted IR with thousands of orphan functions. Bisection confirmed safe passes: `SCCPPass` + `DCEPass`. Unsafe passes: `SimplifyCFGPass`, `InstCombinePass`. Fix: (a) single shared `llvm::Module` with proper DataLayout/TargetTriple; (b) `ConstantFoldingPass` runs optimization once per module instead of per-BB; (c) safe explicit pipeline replaces `buildPerModuleDefaultPipeline(O2)`. All 35 tests pass.
 
 ### Project Database & Interactive UI (Phase 6)
 

@@ -2,6 +2,9 @@
 #define IR_LIFTING_PASS_H
 
 #include <ReWizard/Analysis/PassProvider.h>
+#include <ReWizard/IR/Lifter.h>
+#include <vector>
+#include <memory>
 
 namespace ReWizard {
 
@@ -21,6 +24,9 @@ namespace ReWizard {
         bool PostRun(AnalysisContext* context) override;
         std::string_view Name() const override { return "IRLiftingPass"; }
         std::vector<std::string_view> Dependencies() const override { return { "StaticControlFlowRebuilder" }; }
+
+    private:
+        std::unique_ptr<Lifter> lifter_;
     };
 
 }

@@ -38,14 +38,15 @@ namespace ReWizard {
 
         spdlog::info("IRLiftingPass: lifting functions to LLVM IR");
 
+        bool is64Bit = (loader->Arch().first == ZYDIS_MACHINE_MODE_LONG_64);
+        lifter_ = std::make_unique<Lifter>(is64Bit);
+
         size_t liftedBlocks = 0;
         size_t totalBlocks = 0;
 
         for (auto& function : module->GetFunctions()) {
             if (!function)
                 continue;
-
-            Lifter lifter;
 
             for (auto& bb : function->GetBasicBlocks()) {
                 if (!bb)
@@ -72,7 +73,7 @@ namespace ReWizard {
                 opts.baseAddress = start;
                 opts.is64Bit = (loader->Arch().first == ZYDIS_MACHINE_MODE_LONG_64);
 
-                auto result = lifter.LiftBasicBlock(bytes, len, opts);
+                auto result = lifter_->LiftBasicBlock(bytes, len, opts);
 
                 if (result.success && result.function && result.entryBlock) {
                     auto irBlock = IRBlock::Wrap(result.entryBlock);
