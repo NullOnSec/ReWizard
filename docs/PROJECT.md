@@ -26,14 +26,23 @@ AnalysisManager
 
 ### IR Layer (Phase 4+)
 
-Deobfuscation passes (constant folding, dead code elimination, CFF flattening recovery) operate on **VEX IR** — Valgrind's intermediate representation, maintained by angr as `libvex`. Operating on IR instead of raw x86 instructions:
+Deobfuscation uses a **split IR architecture**:
 
-- Makes transformations architecture-independent (same pass works on x86, ARM, MIPS)
-- Provides explicit side-effects (register writes, memory stores, condition flags)
-- Enables sound constant propagation and dead code elimination on a simple RISC-like representation
-- Avoids the need for custom lifters — angr's `libvex` supports x86, AMD64, ARM, ARM64, MIPS, PPC
+**VEX IR for analysis** — lifting raw bytes to IR for understanding semantics, detecting dead code, constant propagation, CFF pattern matching. VEX is the analysis IR: it makes all side-effects explicit, is architecture-independent, and angr maintains it.
 
-VEX IR is lifted from raw bytes via `IRSB` (IR Super Block) — each basic block becomes a sequence of typed statements (WrTmp, Put, Store, Exit) operating on temporaries.
+**LLVM MC for code emission** — when deobfuscation needs to patch the binary (e.g., rewriting a flattened function), LLVM MC lowers the transformed code back to correct x86/x86_64 bytes. VEX has no code generation backend, so LLVM MC fills this role.
+
+This split means we don't need the full LLVM toolchain — only the MC (Machine Code) layer and X86 target description. No Clang, no optimizer pipeline, no linker. Built with `-DLLVM_TARGETS_TO_BUILD=X86`, the resulting binary size is ~30-80MB, acceptable for a reversing suite.
+
+```
+Binary bytes ──(VEX)──► IRSB (analysis) ──(transform)──► Modified IRSB
+                                                            │
+                                      ┌─────────────────────┘
+                                      ▼
+                            Lower to LLVM MC ──(emit)──► Patched bytes
+```
+
+For analysis-only passes (constant folding detection, dead code identification, opaque predicate reasoning), VEX IR is sufficient and no code emission is needed. Only CFF unflattening and binary patching require the LLVM MC lowering path.
 
 ### Current Passes
 
@@ -69,11 +78,13 @@ HybridAnalysisPass ← ITraceReader ← IEmulator
 | LIEF     | extended_build_patch  | PE/ELF/MachO binary parsing              |
 | Unicorn  | v2.1.0 (x86 only)     | CPU micro-execution (optional accelerator) |
 | Bochs    | (TBD)                 | Full-system emulation (primary backend)   |
-| VEX IR   | angr/pyvex (C core)  | IR lifting for deobfuscation passes      |
+| VEX IR   | angr/pyvex (C core)  | Analysis IR: lifting bytes → IR for deobfuscation |
+| LLVM MC  | v19+ (X86 target only) | Code emission: lowering transformed IR → x86 bytes for binary patching |
+| Bochs    | (TBD)                 | Full-system emulation (primary backend)   |
 | Boost    | 1.85.0                | Graph (adjacency_list, GraphViz output)   |
 | spdlog   | (via LIEF)            | Logging                                  |
 
-**Dependency policy:** No custom lifters — only use readily available, maintained libraries. VEX IR is the best fit: maintained by angr, C library compiles with MSVC, BSD-2-Clause license, supports multiple architectures. LLVM IR was considered but rejected as too large/heavyweight for our needs.
+**Dependency policy:** No custom lifters — only use readily available, maintained libraries. VEX IR handles lifting and analysis. LLVM MC handles code emission (binary patching). LLVM is integrated minimally: only the MC layer and X86 target, built with `-DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_ENABLE_PROJECTS=""`. No Clang, no optimizer pipeline, no linker. Resulting binary size ~30-80MB, acceptable for a reversing suite.
 
 ## Build
 

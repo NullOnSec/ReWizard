@@ -12,15 +12,15 @@ Updated: 2026-05-15
 - **No Python scripts** — everything embedded in C++. No "record on Linux / analyze on Windows" workflow.
 - **Bochs snapshot strategy** — boot once, save CPU+memory state, restore for each analysis session
 
-### IR: VEX IR for Deobfuscation
+### IR: VEX IR for Analysis, LLVM MC for Code Emission
 
-- **VEX IR is the chosen IR** for deobfuscation (constant folding, dead code elimination, CFF flattening recovery)
-- **LLLVM is OUT** — too large/heavyweight for our use case
-- **No custom lifters** — must use readily available, maintained code only
-- angr's `libvex` (from pyvex C core) compiles with MSVC, BSD-2-Clause license, supports x86/AMD64/ARM/ARM64/MIPS/PPC
-- Deobfuscation passes operate on VEX IR statements (WrTmp, Put, Store, Exit) instead of raw x86 instructions
-- This makes transformations architecture-independent and sound (all side-effects explicit in IR)
-- Multi-architecture future-proof: same deobfuscation passes work on ARM, MIPS, etc.
+- **VEX IR** lifts x86 → IR for analysis (constant folding detection, dead code identification, CFF pattern matching)
+- **LLVM MC** lowers transformed code → x86 bytes for binary patching (CFF unflattening, constant folding writeback)
+- VEX has **no code generation backend** — it can lift but cannot emit native code
+- LLVM MC is the only production-grade x86 encoder that compiles on MSVC and handles x86 encoding correctly
+- We integrate LLVM minimally: only the MC layer + X86 target, built with `-DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_ENABLE_PROJECTS=""`
+- No Clang, no optimizer pipeline, no linker. Resulting binary size ~30-80MB — acceptable for a reversing suite
+- Alternative considered: writing our own x86 encoder. Rejected — x86 encoding is notoriously complex (prefixes, ModRM, VEX/EVEX, REX.W, etc.), LLVM MC already handles this correctly
 
 ### Bochs Rationale
 
@@ -90,6 +90,15 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
 - Integrate with `BasicBlock`: each BB holds optional `IRBlock` for its lifted IR
 - Test: lift known x86 byte sequences (nop, mov, add, jmp) and verify IRSB output
 
+### 2. LLVM MC Integration (Prerequisite for Binary Patching)
+- Add LLVM as CMake FetchContent dependency with minimal configuration:
+  - `-DLLVM_TARGETS_TO_BUILD=X86` (only x86/AMD64 target)
+  - `-DLLVM_ENABLE_PROJECTS=""` (no Clang, no extra tools)
+  - `-DLLVM_BUILD_TOOLS=OFF`, `-DLLVM_BUILD_EXAMPLES=OFF`, `-DLLVM_BUILD_TESTS=OFF`
+- Create `Emission/MCEmitter.h|.cpp` — wraps LLVM MC layer to emit x86 bytes from instruction descriptions
+- Create `Emission/Patcher.h|.cpp` — writes encoded bytes back into the loaded binary at specified offsets
+- Test: emit known instructions (nop, mov reg/reg, jmp rel32) and verify byte output
+
 ### 2. Bochs Integration Architecture
 - Design `IEmulator` / `ITraceProducer` interface
 - Add Bochs as FetchContent/prebuilt dependency (LGPL v2.1)
@@ -105,16 +114,19 @@ The binspektor prototype needed **20 hooks (13 unique implementations) just for 
 - Evaluate constant arithmetic operations (Add32, Sub32, etc. with constant operands)
 - Propagate constants through temporaries
 - Simplify identities (xor tmp, tmp → 0; sub tmp, tmp → 0; and tmp, 0xFFFF → zero-extend)
+- For binary patching: lower simplified blocks through LLVM MC emitter
 
 ### 4. DeadCodeEliminationPass (VEX IR-based)
 - Identify WrTmp/Put assignments that are never read (dead temporaries)
 - Remove unreachable basic blocks
 - Remove dead Store operations
+- Analysis only — no LLVM MC emission needed for basic dead code elimination
 
 ### 5. DeobfuscationFlattenPass (VEX IR-based)
 - Pattern-match dispatcher state variable in VEX IR
 - Reconstruct original control flow from flattened switch-like state machines
 - Write recovered CFG back to BasicBlock/Function structure
+- For binary patching: lower reconstructed blocks through LLVM MC emitter
 
 ### 6. UnicornExecutor (Optional Accelerator)
 - Encapsulate binspektor prototype as `UnicornExecutor` implementing `IEmulator`
