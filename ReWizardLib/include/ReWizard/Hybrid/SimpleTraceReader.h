@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 namespace ReWizard {
 
@@ -19,6 +20,7 @@ namespace ReWizard {
 
     private:
         std::vector<TraceRecord> m_records;
+        std::unordered_map<uintptr_t, std::vector<size_t>> m_pcIndex;
     };
 
 }

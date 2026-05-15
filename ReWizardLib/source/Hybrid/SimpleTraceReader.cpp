@@ -22,6 +22,8 @@ namespace ReWizard {
             }
 
             m_records.clear();
+            m_pcIndex.clear();
+            m_records.reserve(j.size());
             for (const auto& entry : j) {
                 TraceRecord rec;
                 if (entry.contains("pc")) {
@@ -94,6 +96,7 @@ namespace ReWizard {
                     }
                 }
 
+                m_pcIndex[rec.pc].push_back(m_records.size());
                 m_records.push_back(std::move(rec));
             }
 
@@ -107,9 +110,12 @@ namespace ReWizard {
 
     std::vector<const TraceRecord*> SimpleTraceReader::GetRecordsForPC(uintptr_t pc) const {
         std::vector<const TraceRecord*> result;
-        for (const auto& rec : m_records) {
-            if (rec.pc == pc)
-                result.push_back(&rec);
+        auto it = m_pcIndex.find(pc);
+        if (it != m_pcIndex.end()) {
+            result.reserve(it->second.size());
+            for (size_t idx : it->second) {
+                result.push_back(&m_records[idx]);
+            }
         }
         return result;
     }
