@@ -31,7 +31,7 @@ namespace ReWizard {
 			return nullptr;
 		--it;
 		Function* fn = it->second;
-		if (address >= fn->GetStart() && address <= fn->GetEnd())
+		if (address >= fn->GetStart() && address < fn->GetEnd())
 			return fn;
 		return nullptr;
 	}
