@@ -7,6 +7,7 @@
 #include <ReWizard/Analysis/Units/Module.h>
 #include <ReWizard/Analysis/Units/Function.h>
 #include <ReWizard/Analysis/Units/BasicBlock.h>
+#include <ReWizard/Analysis/AnalysisResult.h>
 
 #include <ReWizard/Types/Win32InternalTypes.hpp>
 

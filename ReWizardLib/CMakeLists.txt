@@ -14,6 +14,7 @@ add_library(ReWizardLib STATIC
     "source/Analysis/Units/Module.cpp"
     "source/Analysis/Units/SymbolTable.cpp"
     "source/Analysis/PassProvider.cpp"
+    "source/Analysis/AnalysisResult.cpp"
     ${PASS_SOURCES} # All passes included here
 )
 
@@ -26,7 +27,7 @@ target_include_directories(ReWizardLib PUBLIC
     "${UNICORN_INCLUDE_DIR}"
 )
 
-target_link_libraries(ReWizardLib PUBLIC LIEF::LIEF lief_spdlog Zydis Boost::headers unicorn)
+target_link_libraries(ReWizardLib PUBLIC LIEF::LIEF lief_spdlog Zydis Boost::headers unicorn nlohmann_json::nlohmann_json)
 
 # Note: Pass auto-registration happens via inline statics in headers included by
 # PassProvider.cpp, so /WHOLEARCHIVE is unnecessary for the current mechanism.
