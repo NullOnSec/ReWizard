@@ -1,4 +1,5 @@
 #include <ReWizard/Analysis/Passes/HybridAnalysisPass.h>
+#include <ReWizard/Analysis/Passes/StaticControlFlowRebuilder.h>
 #include <ReWizard/Analysis/AnalysisContext.h>
 #include <ReWizard/Analysis/Units/Module.h>
 #include <ReWizard/Analysis/Units/Function.h>
@@ -44,6 +45,8 @@ namespace ReWizard {
             m_reader = std::move(reader);
         }
 
+        std::set<uintptr_t> resolvedTargets;
+
         for (const auto& fn : module->GetFunctions()) {
             if (!fn->IsMarked())
                 continue;
@@ -56,6 +59,7 @@ namespace ReWizard {
                     auto target = ResolveIndirectTarget(extInsn, *rec);
                     if (target) {
                         fn->AddCallSite(insn->Address(), target);
+                        resolvedTargets.insert(target);
                         spdlog::debug("HybridAnalysisPass: resolved indirect target at 0x{:x} -> 0x{:x}",
                                       insn->Address(), target);
                     }
@@ -64,6 +68,19 @@ namespace ReWizard {
 
             ProcessOpaquePredicates(fn.get(), m_reader.get());
             fn->SetHybridVerified(true);
+        }
+
+        // Re-run static analysis on newly resolved targets to discover new functions
+        if (!resolvedTargets.empty()) {
+            StaticControlFlowRebuilder rebuilder;
+            for (auto target : resolvedTargets) {
+                if (context->GetLoader()->IsWithinMapping(target) &&
+                    !context->GetVisited().contains(target) &&
+                    !module->GetFunctionForAddress(target)) {
+                    spdlog::info("HybridAnalysisPass: re-analyzing from resolved target 0x{:x}", target);
+                    rebuilder.ReAnalyzeFrom(context, target);
+                }
+            }
         }
 
         return true;

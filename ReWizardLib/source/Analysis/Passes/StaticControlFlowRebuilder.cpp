@@ -18,6 +18,11 @@ namespace ReWizard {
     bool StaticControlFlowRebuilder::PreRun(AnalysisContext* context) { UNUSED(context); return true; }
     bool StaticControlFlowRebuilder::PostRun(AnalysisContext* context) { UNUSED(context); return true; }
 
+    void StaticControlFlowRebuilder::ReAnalyzeFrom(AnalysisContext* context, uintptr_t address) {
+        if (!context || !address) return;
+        StaticPathExplorer(context, false, address, false);
+    }
+
     bool StaticControlFlowRebuilder::Run(AnalysisContext* context) {
         if (!context)
             return false;

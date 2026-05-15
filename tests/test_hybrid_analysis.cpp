@@ -3,6 +3,7 @@
 #include <ReWizard/Analysis/Units/Module.h>
 #include <ReWizard/Analysis/Units/Function.h>
 #include <ReWizard/Analysis/Passes/HybridAnalysisPass.h>
+#include <ReWizard/Analysis/Passes/ImportAnalysisPass.h>
 #include <ReWizard/Hybrid/ITraceReader.h>
 #include <ReWizard/Hybrid/SimpleTraceReader.h>
 #include <ReWizard/Hybrid/TraceRecord.h>
@@ -65,16 +66,18 @@ TEST_F(HybridAnalysisTest, ResolvesIndirectCallFromTrace) {
     fnRaw->AddBasicBlock(std::move(bb));
 
     // Create a fake indirect call instruction at 0xFFFF0000
-    auto& disas = Disassembler::Get(ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
-    auto proxy = disas.operator->();
+    {
+        auto& disas = Disassembler::Get(ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
+        auto proxy = disas.operator->();
 
-    // Encode: call rax (FF D0)
-    uint8_t callRax[] = { 0xFF, 0xD0 };
-    auto insn = proxy->DisassembleSingle<ExtendedInstruction>(callRax, sizeof(callRax));
-    ASSERT_NE(insn, nullptr);
-    insn->Address() = 0xFFFF0000;
-    insn->IsIndirect() = true;
-    module->AddInstruction(insn);
+        // Encode: call rax (FF D0)
+        uint8_t callRax[] = { 0xFF, 0xD0 };
+        auto insn = proxy->DisassembleSingle<ExtendedInstruction>(callRax, sizeof(callRax));
+        ASSERT_NE(insn, nullptr);
+        insn->Address() = 0xFFFF0000;
+        insn->IsIndirect() = true;
+        module->AddInstruction(insn);
+    }
     module->AddFunction(std::move(fn));
 
     // Set up mock trace: at PC 0xFFFF0000, RAX = 0x12345678
@@ -173,4 +176,70 @@ TEST_F(HybridAnalysisTest, SimpleTraceReaderLoadsJson) {
     EXPECT_EQ(records[0]->registers.at(ZYDIS_REGISTER_RAX), 0xdeadbeef);
 
     std::filesystem::remove(tempPath);
+}
+
+TEST_F(HybridAnalysisTest, ResolvedTargetTriggersReAnalysis) {
+    auto ctx = AnalysisContext::Create(fixturePath_);
+    ASSERT_NE(ctx, nullptr);
+
+    auto module = ctx->GetModule();
+    ASSERT_NE(module, nullptr);
+
+    // Populate symbol table so we know an export address
+    ImportAnalysisPass importPass;
+    ASSERT_TRUE(importPass.Run(ctx.get()));
+
+    auto* symTable = module->GetSymbolTable();
+    ASSERT_NE(symTable, nullptr);
+    const auto* exp = symTable->GetExportByName("TestExport");
+    if (!exp) {
+        GTEST_SKIP() << "TestExport not found in fixture";
+    }
+    uintptr_t exportAddr = exp->address;
+    ASSERT_NE(exportAddr, 0);
+
+    // Create a fake function with an indirect call
+    auto fn = module->CreateFunction("caller_fn");
+    auto* fnRaw = fn.get();
+    fnRaw->SetStart(0xFFFF0000);
+    fnRaw->SetEnd(0xFFFF0010);
+    fnRaw->MarkForHybridAnalysis();
+
+    auto bb = fnRaw->CreateBasicBlock(0xFFFF0000);
+    bb->SetEnd(0xFFFF0010);
+    fnRaw->AddBasicBlock(std::move(bb));
+
+    {
+        auto& disas = Disassembler::Get(ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
+        auto proxy = disas.operator->();
+
+        uint8_t callRax[] = { 0xFF, 0xD0 };
+        auto insn = proxy->DisassembleSingle<ExtendedInstruction>(callRax, sizeof(callRax));
+        ASSERT_NE(insn, nullptr);
+        insn->Address() = 0xFFFF0000;
+        insn->IsIndirect() = true;
+        module->AddInstruction(insn);
+    }
+    module->AddFunction(std::move(fn));
+
+    // Mock trace resolves the indirect call to TestExport
+    auto mockReader = std::make_unique<MockTraceReader>();
+    TraceRecord rec;
+    rec.pc = 0xFFFF0000;
+    rec.registers[ZYDIS_REGISTER_RAX] = exportAddr;
+    mockReader->records.push_back(std::move(rec));
+
+    // Count functions before hybrid pass
+    size_t fnCountBefore = module->GetFunctions().size();
+
+    HybridAnalysisPass pass;
+    pass.SetTraceReader(std::move(mockReader));
+    ASSERT_TRUE(pass.Run(ctx.get()));
+
+    // A new function should have been discovered at the export address
+    size_t fnCountAfter = module->GetFunctions().size();
+    EXPECT_GT(fnCountAfter, fnCountBefore);
+
+    auto* discoveredFn = module->GetFunctionForAddress(exportAddr);
+    EXPECT_NE(discoveredFn, nullptr);
 }

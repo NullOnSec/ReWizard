@@ -25,6 +25,8 @@ namespace ReWizard {
         bool PostRun(AnalysisContext* context) override;
         std::string_view Name() const override { return "StaticControlFlowRebuilder"; }
 
+        void ReAnalyzeFrom(AnalysisContext* context, uintptr_t address);
+
     private:
         void StaticPathExplorer(AnalysisContext* context, bool reAnalyzeAll = false, uintptr_t fromAddress = 0, bool bypassHeur = false);
         void AnalyzeFunction(AnalysisContext* context, std::unique_ptr<Function>& function, uintptr_t start, size_t* insnCount, size_t* stackModCount, bool verbose);
