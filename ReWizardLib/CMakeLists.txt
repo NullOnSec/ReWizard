@@ -25,6 +25,7 @@ add_library(ReWizardLib STATIC
     "source/Analysis/Units/Function.cpp"
     "source/Analysis/Units/Module.cpp"
     "source/Analysis/Units/SymbolTable.cpp"
+    "source/Analysis/Units/SymbolManager.cpp"
     "source/Analysis/Units/XrefManager.cpp"
     "source/Analysis/PassProvider.cpp"
     "source/Analysis/AnalysisResult.cpp"

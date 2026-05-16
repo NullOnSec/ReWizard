@@ -45,6 +45,14 @@ namespace ReWizard {
         int64_t ordinal;
     };
 
+    struct AnnotationRecord {
+        uintptr_t address;
+        std::string name;
+        std::string comment;
+        std::string type;
+        std::string kind;
+    };
+
     class AnalysisDatabase {
     public:
         ~AnalysisDatabase();
@@ -78,6 +86,10 @@ namespace ReWizard {
         std::vector<XrefRecord> QueryXrefsTo(uintptr_t address);
         std::vector<XrefRecord> QueryXrefsFrom(uintptr_t address);
         std::vector<XrefRecord> QueryAllXrefs();
+
+        bool SaveAnnotation(uintptr_t address, const std::string& name, const std::string& comment, const std::string& type, const std::string& kind);
+        bool DeleteAnnotation(uintptr_t address);
+        std::vector<AnnotationRecord> QueryAllAnnotations();
 
         bool SaveModule(Module& module);
 

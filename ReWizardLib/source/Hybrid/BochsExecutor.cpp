@@ -22,15 +22,17 @@
 // LIEF for PE parsing
 #include <LIEF/PE.hpp>
 
-namespace ReWizard {
+// Forward declarations from Bochs main.cc (global namespace)
+void bx_init_options(void);
+void bx_init_bx_dbg(void);
+extern char *bochsrc_filename;
+extern Bit8u bx_cpu_count;
 
-    // Forward declarations from Bochs main.cc
-    extern "C" {
-        void bx_init_options(void);
-        void bx_init_bx_dbg(void);
-        extern char *bochsrc_filename;
-        extern Bit8u bx_cpu_count;
-    }
+// Defined in main.cc; loads the display library plugin (required before DEV_init_devices)
+bool load_and_init_display_lib(void);
+void bx_init_hardware(void);
+
+namespace ReWizard {
 
     static bool g_bochsCoreInitialized = false;
 
@@ -63,6 +65,7 @@ namespace ReWizard {
         bool initialized = false;
         std::filesystem::path binariesDir;
         std::filesystem::path targetPath;
+        std::filesystem::path diskImagePath;
 
         // Parsed PE images
         std::unique_ptr<LIEF::PE::Binary> ntoskrnl;
@@ -136,25 +139,44 @@ namespace ReWizard {
 
         // Initialize Bochs core (once only)
         if (!g_bochsCoreInitialized) {
-            spdlog::info("BochsExecutor: initializing Bochs core...");
+            if (SIM != nullptr) {
+                // Bochs was already initialized by another component (e.g. test fixture).
+                // Reuse the existing instance; just reset CPU state to a known baseline.
+                spdlog::info("BochsExecutor: Bochs core already initialized, reusing");
+                bx_pc_system.Reset(BX_RESET_HARDWARE);
+                g_bochsCoreInitialized = true;
+            } else {
+                spdlog::info("BochsExecutor: initializing Bochs core...");
 
-            bx_init_siminterface();
-            SAFE_GET_IOFUNC();
-            SAFE_GET_GENLOG();
-            bx_init_bx_dbg();
-            plugin_startup();
-            bx_init_options();
+                bx_init_siminterface();
+                SAFE_GET_IOFUNC();
+                SAFE_GET_GENLOG();
+                bx_init_bx_dbg();
+                plugin_startup();
+                bx_init_options();
 
             auto tempDir = std::filesystem::temp_directory_path();
             auto bochsrcPath = tempDir / "rewizard_minimal.bochsrc";
             {
                 std::ofstream ofs(bochsrcPath);
-                ofs << "megs: 32\n";
-                ofs << "cpu: model=corei7_haswell_4770, count=1\n";
-                ofs << "memory: guest=32, host=32\n";
-                ofs << "romimage: file=\"Z:/bochs/bochs-3.0-msvc-src/bochs-3.0/bios/BIOS-bochs-latest\"\n";
+                ofs << "cpu: model=corei7_haswell_4770, count=1, ips=50000000, reset_on_triple_fault=1, ignore_bad_msrs=1\n";
+                ofs << "memory: guest=512, host=256\n";
+                ofs << "romimage: file=\"Z:/bochs/bochs-3.0-msvc-src/bochs-3.0/bios/BIOS-bochs-latest\", options=fastboot\n";
                 ofs << "vgaromimage: file=\"Z:/bochs/bochs-3.0-msvc-src/bochs-3.0/bios/VGABIOS-lgpl-latest.bin\"\n";
                 ofs << "display_library: nogui\n";
+                ofs << "vga: extension=vbe, update_freq=5, realtime=1\n";
+                ofs << "mouse: enabled=0\n";
+                ofs << "pci: enabled=1, chipset=i440fx\n";
+                ofs << "clock: sync=none, time0=local\n";
+                ofs << "ata0: enabled=1, ioaddr1=0x1f0, ioaddr2=0x3f0, irq=14\n";
+                if (!impl_->diskImagePath.empty()) {
+                    ofs << "ata0-master: type=disk, path=\"" << impl_->diskImagePath.string() << "\", mode=flat\n";
+                    ofs << "boot: disk\n";
+                }
+                // If no disk image, omit 'boot:' entirely. Bochs defaults to floppy,
+                // and 'boot: none' is explicitly rejected by bx_read_configuration().
+                ofs << "log: -\n";
+                ofs << "panic: action=report\n";
             }
             bochsrc_filename = _strdup(bochsrcPath.string().c_str());
 
@@ -170,58 +192,36 @@ namespace ReWizard {
                            SIM->get_param_num(BXPN_CPU_NTHREADS)->get();
             if (bx_cpu_count == 0) bx_cpu_count = 1;
 
-            // Manual hardware init (skip DEV_init_devices which crashes)
-            bx_pc_system.initialize(SIM->get_param_num(BXPN_IPS)->get());
-            if (SIM->get_param_string(BXPN_LOG_FILENAME)->getptr()[0] != '-') {
-                io->init_log(SIM->get_param_string(BXPN_LOG_FILENAME)->getptr());
+            // Load display library plugin BEFORE device init.
+            // Without this, DEV_init_devices() crashes because bx_gui is NULL
+            // when the VGA device tries to call bx_gui->init().
+            if (!load_and_init_display_lib()) {
+                spdlog::error("BochsExecutor: failed to load display library");
+                return false;
             }
-            io->set_log_prefix(SIM->get_param_string(BXPN_LOG_PREFIX)->getptr());
 
-            bx_param_num_c *bxp_memsize = SIM->get_param_num(BXPN_MEM_SIZE);
-            Bit64u memSize = bxp_memsize->get64() * BX_CONST64(1024 * 1024);
-            bx_param_num_c *bxp_host_memsize = SIM->get_param_num(BXPN_HOST_MEM_SIZE);
-            Bit64u hostMemSize = bxp_host_memsize->get64() * BX_CONST64(1024 * 1024);
-            if (memSize < hostMemSize) hostMemSize = memSize;
-            bx_param_num_c *bxp_memblock_size = SIM->get_param_num(BXPN_MEM_BLOCK_SIZE);
-            Bit32u memBlockSize = (Bit32u)(bxp_memblock_size->get64() * 1024);
-            BX_MEM(0)->init_memory(memSize, hostMemSize, memBlockSize);
-
-            BX_CPU(0)->initialize();
-            BX_CPU(0)->sanity_checks();
-            BX_CPU(0)->register_state();
-            BX_INSTR_INITIALIZE(0);
-
-            bx_pc_system.Reset(BX_RESET_HARDWARE);
+            // Full hardware initialization: memory, CPU, ROMs, devices, reset.
+            // This replaces the manual init that skipped DEV_init_devices.
+            bx_init_hardware();
 
             g_bochsCoreInitialized = true;
-            spdlog::info("BochsExecutor: Bochs core initialized");
-        }
-
-        // Map ntoskrnl.exe into Bochs physical memory
-        auto ntoskrnlBase = 0xFFFFF80000000000ULL;
-        auto ntoskrnlData = ReadFile(ntoskrnlPath.string());
-        if (!ntoskrnlData.empty()) {
-            // Write in chunks to avoid cross-page issues in writePhysicalPage
-            for (size_t offset = 0; offset < ntoskrnlData.size(); offset += 4096) {
-                size_t chunk = std::min<size_t>(4096, ntoskrnlData.size() - offset);
-                BX_MEM(0)->writePhysicalPage(BX_CPU(0), ntoskrnlBase + offset, (unsigned)chunk, ntoskrnlData.data() + offset);
+            spdlog::info("BochsExecutor: Bochs core initialized with full device support");
             }
-            spdlog::info("BochsExecutor: mapped ntoskrnl.exe at 0x{:x} ({} bytes)", ntoskrnlBase, ntoskrnlData.size());
         }
 
-        // Set CPU state for kernel mode execution
-        BX_CPU(0)->gen_reg[BX_64BIT_REG_RIP].rrx = ntoskrnlBase +
-            impl_->ntoskrnl->optional_header().addressof_entrypoint();
-        BX_CPU(0)->gen_reg[BX_64BIT_REG_RSP].rrx = ntoskrnlBase + 0x200000;
-        BX_CPU(0)->gen_reg[BX_64BIT_REG_RBP].rrx = ntoskrnlBase + 0x200000;
-        BX_CPU(0)->cr0.val32 = 0x80050033;
-        BX_CPU(0)->cr4.val32 = 0x000006F8;
-        BX_CPU(0)->cr3 = 0x00000000001AD000;
-        BX_CPU(0)->eflags = 0x0000000000000002;
-
-        spdlog::info("BochsExecutor: CPU state set");
-        spdlog::info("BochsExecutor: RIP = 0x{:x}", BX_CPU(0)->gen_reg[BX_64BIT_REG_RIP].rrx);
-        spdlog::info("BochsExecutor: RSP = 0x{:x}", BX_CPU(0)->gen_reg[BX_64BIT_REG_RSP].rrx);
+        // After bx_init_hardware(), the CPU is in real mode at the BIOS entry point.
+        // For bare-metal ntoskrnl execution we would need to set up page tables and
+        // map the kernel image into the high canonical address range. That requires
+        // a full bootloader-like setup (page tables, GDT/IDT, HAL stubs) which is
+        // beyond the scope of direct BochsExecutor init.
+        //
+        // The practical path to a running Windows kernel is:
+        //   1. Provide a disk image with Windows installed (or Windows PE)
+        //   2. Call BootFromDisk() to let the BIOS bootloader -> winload -> ntoskrnl
+        //   3. Use instrumentation to trace kernel execution once booted.
+        //
+        // For now we leave the CPU at the BIOS reset vector so the user can boot
+        // from disk, or manually set up the environment for direct kernel execution.
 
         impl_->initialized = true;
         spdlog::info("BochsExecutor: initialization complete");
@@ -333,6 +333,45 @@ namespace ReWizard {
     void BochsExecutor::SetTraceProducer(ITraceProducer* producer) {
         impl_->traceProducer = producer;
         ReWizard_SetBochsTraceProducer(producer);
+    }
+
+    void BochsExecutor::SetDiskImage(const std::string& path) {
+        impl_->diskImagePath = path;
+        spdlog::info("BochsExecutor: disk image set to {}", path);
+    }
+
+    bool BochsExecutor::BootFromDisk(size_t maxInstructions) {
+        if (!impl_->initialized) {
+            spdlog::error("BochsExecutor: not initialized");
+            return false;
+        }
+        if (!g_bochsCoreInitialized) {
+            spdlog::error("BochsExecutor: BootFromDisk: Bochs core not initialized");
+            return false;
+        }
+        if (impl_->diskImagePath.empty()) {
+            spdlog::error("BochsExecutor: BootFromDisk: no disk image configured. Call SetDiskImage() first.");
+            return false;
+        }
+
+        // After bx_init_hardware(), the CPU is at the BIOS reset vector.
+        // We don't touch RIP; just execute instructions and let the BIOS boot.
+        Bit64u currentRip = BX_CPU(0)->gen_reg[BX_64BIT_REG_RIP].rrx;
+        spdlog::info("BochsExecutor: booting from disk (RIP=0x{:x}, max {} instructions)",
+                      currentRip, maxInstructions);
+
+        if (maxInstructions == 0) {
+            spdlog::warn("BochsExecutor: maxInstructions=0, nothing to execute");
+            return true;
+        }
+
+        bx_guard.guard_for |= BX_DBG_GUARD_ICOUNT;
+        BX_CPU(0)->guard_found.icount_max = BX_CPU(0)->get_icount() + maxInstructions;
+        BX_CPU(0)->cpu_loop_debugger();
+
+        Bit64u newRip = BX_CPU(0)->gen_reg[BX_64BIT_REG_RIP].rrx;
+        spdlog::info("BochsExecutor: boot paused at 0x{:x}", newRip);
+        return true;
     }
 
 }

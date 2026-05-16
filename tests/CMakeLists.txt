@@ -10,8 +10,10 @@ add_executable(ReWizardTests
     test_ir_lifter.cpp
     test_database.cpp
     test_xref_manager.cpp
+    test_symbol_manager.cpp
     test_bochs_init.cpp
     test_bochs_hybrid_e2e.cpp
+    test_bochs_executor.cpp
 )
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)

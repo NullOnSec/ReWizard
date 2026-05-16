@@ -118,6 +118,14 @@ namespace ReWizard {
             );
             CREATE INDEX IF NOT EXISTS idx_xref_to ON xrefs(to_addr);
             CREATE INDEX IF NOT EXISTS idx_xref_from ON xrefs(from_addr);
+
+            CREATE TABLE IF NOT EXISTS user_annotations (
+                address INTEGER PRIMARY KEY,
+                name TEXT,
+                comment TEXT,
+                type TEXT,
+                kind TEXT DEFAULT 'unknown'
+            );
         )sql";
 
         char* errMsg = nullptr;
@@ -554,6 +562,69 @@ namespace ReWizard {
             Rollback();
             return false;
         }
+    }
+
+    bool AnalysisDatabase::SaveAnnotation(uintptr_t address, const std::string& name, const std::string& comment, const std::string& type, const std::string& kind) {
+        if (!m_db) return false;
+        const char* sql = R"sql(
+            INSERT INTO user_annotations (address, name, comment, type, kind)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(address) DO UPDATE SET
+                name=excluded.name,
+                comment=excluded.comment,
+                type=excluded.type,
+                kind=excluded.kind;
+        )sql";
+        sqlite3_stmt* stmt = nullptr;
+        int rc = sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr);
+        if (rc != SQLITE_OK) {
+            spdlog::error("Failed to prepare annotation save: {}", sqlite3_errmsg(m_db));
+            return false;
+        }
+        sqlite3_bind_int64(stmt, 1, static_cast<sqlite3_int64>(address));
+        sqlite3_bind_text(stmt, 2, name.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 3, comment.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 4, type.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 5, kind.c_str(), -1, SQLITE_STATIC);
+        rc = sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+        if (rc != SQLITE_DONE) {
+            spdlog::error("Failed to save annotation: {}", sqlite3_errmsg(m_db));
+            return false;
+        }
+        return true;
+    }
+
+    bool AnalysisDatabase::DeleteAnnotation(uintptr_t address) {
+        if (!m_db) return false;
+        const char* sql = "DELETE FROM user_annotations WHERE address = ?1;";
+        sqlite3_stmt* stmt = nullptr;
+        int rc = sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr);
+        if (rc != SQLITE_OK) return false;
+        sqlite3_bind_int64(stmt, 1, static_cast<sqlite3_int64>(address));
+        rc = sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+        return rc == SQLITE_DONE;
+    }
+
+    std::vector<AnnotationRecord> AnalysisDatabase::QueryAllAnnotations() {
+        std::vector<AnnotationRecord> results;
+        if (!m_db) return results;
+        const char* sql = "SELECT address, name, comment, type, kind FROM user_annotations;";
+        sqlite3_stmt* stmt = nullptr;
+        int rc = sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr);
+        if (rc != SQLITE_OK) return results;
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            AnnotationRecord rec;
+            rec.address = static_cast<uintptr_t>(sqlite3_column_int64(stmt, 0));
+            rec.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+            rec.comment = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+            rec.type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+            rec.kind = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+            results.push_back(std::move(rec));
+        }
+        sqlite3_finalize(stmt);
+        return results;
     }
 
 }

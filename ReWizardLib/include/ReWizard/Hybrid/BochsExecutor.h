@@ -27,6 +27,15 @@ namespace ReWizard {
 
         void SetTraceProducer(ITraceProducer* producer) override;
 
+        // Configure the path to a raw disk image for Windows boot.
+        // Must be called before Initialize().
+        void SetDiskImage(const std::string& path);
+
+        // Boot from the configured disk image.
+        // Runs the CPU from the BIOS reset vector; returns when icount is reached
+        // or a guard fires. Call repeatedly to progress through boot.
+        bool BootFromDisk(size_t maxInstructions);
+
         std::string Name() const override { return "Bochs"; }
 
     private:
