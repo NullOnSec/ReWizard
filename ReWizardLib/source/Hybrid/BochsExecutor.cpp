@@ -104,38 +104,27 @@ namespace ReWizard {
         auto kernel32Path = impl_->binariesDir / "kernel32.dll";
         auto kernelbasePath = impl_->binariesDir / "kernelbase.dll";
 
-        // Check required binaries
-        for (const auto& [name, path] : std::initializer_list<std::pair<const char*, std::filesystem::path>>{
-            {"ntoskrnl.exe", ntoskrnlPath},
-            {"hal.dll", halPath},
-            {"ntdll.dll", ntdllPath},
-            {"kernel32.dll", kernel32Path},
-            {"kernelbase.dll", kernelbasePath}
-        }) {
+        auto tryLoadBinary = [](const std::string& name, const std::filesystem::path& path) -> std::unique_ptr<LIEF::PE::Binary> {
             if (!std::filesystem::exists(path)) {
-                spdlog::error("BochsExecutor: {} not found at {}", name, path.string());
-                return false;
+                spdlog::warn("BochsExecutor: {} not found at {} (skipping)", name, path.string());
+                return nullptr;
             }
-        }
+            try {
+                auto bin = LIEF::PE::Parser::parse(path.string());
+                spdlog::info("BochsExecutor: loaded {} ({} sections, image base 0x{:x})",
+                              name, bin->sections().size(), bin->optional_header().imagebase());
+                return bin;
+            } catch (const std::exception& e) {
+                spdlog::warn("BochsExecutor: failed to parse {}: {} (skipping)", name, e.what());
+                return nullptr;
+            }
+        };
 
-        spdlog::info("BochsExecutor: loading Windows system binaries...");
-
-        // Parse PE files using LIEF
-        try {
-            impl_->ntoskrnl = LIEF::PE::Parser::parse(ntoskrnlPath.string());
-            impl_->hal = LIEF::PE::Parser::parse(halPath.string());
-            impl_->ntdll = LIEF::PE::Parser::parse(ntdllPath.string());
-            impl_->kernel32 = LIEF::PE::Parser::parse(kernel32Path.string());
-            impl_->kernelbase = LIEF::PE::Parser::parse(kernelbasePath.string());
-        } catch (const std::exception& e) {
-            spdlog::error("BochsExecutor: failed to parse PE files: {}", e.what());
-            return false;
-        }
-
-        spdlog::info("BochsExecutor: parsed PE files successfully");
-        spdlog::info("BochsExecutor: ntoskrnl.exe: {} sections, image base 0x{:x}",
-                      impl_->ntoskrnl->sections().size(),
-                      impl_->ntoskrnl->optional_header().imagebase());
+        impl_->ntoskrnl = tryLoadBinary("ntoskrnl.exe", ntoskrnlPath);
+        impl_->hal = tryLoadBinary("hal.dll", halPath);
+        impl_->ntdll = tryLoadBinary("ntdll.dll", ntdllPath);
+        impl_->kernel32 = tryLoadBinary("kernel32.dll", kernel32Path);
+        impl_->kernelbase = tryLoadBinary("kernelbase.dll", kernelbasePath);
 
         // Initialize Bochs core (once only)
         if (!g_bochsCoreInitialized) {

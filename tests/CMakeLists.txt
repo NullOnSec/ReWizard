@@ -14,6 +14,7 @@ add_executable(ReWizardTests
     test_bochs_init.cpp
     test_bochs_hybrid_e2e.cpp
     test_bochs_executor.cpp
+    test_bochs_boot_disk.cpp
 )
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
