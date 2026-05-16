@@ -6,66 +6,9 @@ Updated: 2026-05-16
 
 ### Status: FIXED
 
-### Root Cause Analysis
-
-**Three compounding problems were identified and fixed:**
-
-1. **Per-function `llvm::Module` with no DataLayout or TargetTriple.**
-   Fixed by adding `Lifter(bool is64Bit)` constructor that sets correct DataLayout
-   and TargetTriple based on binary architecture.
-
-2. **ConstantFoldingPass ran O2 once per basic block per module.**
-   Fixed by changing `IRLiftingPass` to use a single shared `Lifter` (and thus single
-   shared `llvm::Module`), and changing `ConstantFoldingPass` to find the module once
-   and run optimization once.
-
-3. **LLVM `buildPerModuleDefaultPipeline(O2)` crashed on orphan functions.**
-   The full O2 pipeline includes `SimplifyCFGPass` and `InstCombinePass`, both of which
-   crashed with 0xc0000005 when run on modules containing thousands of tiny orphan
-   functions (no callers, no entry point) with `ExternalLinkage`.
-
-### Pass Bisection Results
-
-| Pass | Result |
-|------|--------|
-| Empty FPM | PASS |
-| `llvm::DCEPass` | PASS |
-| `llvm::SCCPPass` | PASS |
-| `llvm::SimplifyCFGPass` | **CRASH (0xc0000005)** |
-| `llvm::InstCombinePass` | **CRASH (0xc0000005)** |
-
-### Fix Applied
-
-1. **`Lifter(bool is64Bit)`** — sets DataLayout and TargetTriple in constructor
-2. **`IRLiftingPass`** — uses single `std::unique_ptr<Lifter> lifter_` instead of vector
-3. **`ConstantFoldingPass`** — finds module once, runs `LLVMOptimizer::Run()` once
-4. **`LLVMOptimizer`** — replaced `buildPerModuleDefaultPipeline(O2)` with explicit pipeline
-5. **`Lifter::LiftBasicBlock`** — changed `ExternalLinkage` to `InternalLinkage` so `GlobalDCEPass` can remove dead functions
-6. **`LLVMOptimizer`** — added `verifyModule()` before and after optimization
-7. **`LLVMOptimizer`** — enabled `SimplifyCFGPass`, `InstCombinePass`, `GlobalDCEPass` in pipeline
-
 **Full pipeline: `SCCP → DCE → SimplifyCFG → InstCombine → GlobalDCE`**
 
-All 37 tests pass (2 skipped).
-
----
-
-## CFG Recovery Bugs Fixed
-
-### Mega-Function Bug (HandleCall)
-`HandleCall` was pushing direct call targets into local `work` queue instead of outer `functionWork` queue, causing callees to be recursively inlined into the caller. Fixed by threading `functionWork` through `AnalyzeFunction → HandleCall`.
-
-### IAT Entry Point Bug
-`CollectEntryPoints` was adding IAT slot addresses (data-section pointers) as function entry points, producing garbage functions. Removed the import-IAT loop.
-
-### Executable-Section Guards
-`IsExecutableAddress()` helper checks `IMAGE_SCN_MEM_EXECUTE` / `SHF_EXECINSTR` before creating functions or enqueuing targets.
-
-### GetFunctionForAddress Off-By-One
-Changed `address <= fn->GetEnd()` to `address < fn->GetEnd()` (exclusive end).
-
-### JMP Tail-Call Detection
-Unconditional JMPs to known function starts now record a call site instead of inlining. Unknown JMP targets are pushed to both `work` and `functionWork`. Prevents tail-call inlining for known functions while remaining conservative for undiscovered targets.
+All 56 tests pass (3 skipped).
 
 ---
 
@@ -76,16 +19,18 @@ Unconditional JMPs to known function starts now record a call site instead of in
 - **InternalLinkage**: All lifted functions use `InternalLinkage` so `GlobalDCEPass` can remove orphans
 - **verifyModule()**: IR validation before and after optimization catches malformed IR early
 
-### Hybrid Engine: Bochs Primary, Unicorn Optional
+### Hybrid Engine: Bochs Sole Backend
 - **PANDAS is OUT** — Linux-only host, requires QEMU build, cannot run on Windows
-- **Bochs is IN as primary backend** — full-system emulation, no API stubs needed
-- **Unicorn is IN as optional accelerator** — for simple micro-execution
+- **Unicorn is OUT** — removed entirely; remill + static analysis covers the use cases
+- **Bochs is IN as sole backend** — full-system emulation, no API stubs needed
 - **No Python scripts** — everything embedded in C++
 
-### IR: LLVM IR (manual lifter for now, remill planned)
+### IR: LLVM IR with remill (manual lifter deprecated)
 - **Single IR, single toolchain** — LLVM IR for everything
-- **Manual Zydis+IRBuilder lifter** currently lifts MOV, ADD, SUB, XOR, NOP, RET
-- **remill** (Trail of Bits) planned for comprehensive x86 semantics
+- **Manual Zydis+IRBuilder lifter DEPRECATED** — only handled 6/~1500 mnemonics, fundamentally incomplete
+- **remill (Trail of Bits, v6.0.1, Apache-2.0)** chosen as the binary lifter — comprehensive x86/x86_64 semantics
+
+---
 
 ## What's Been Done
 
@@ -101,71 +46,99 @@ Unconditional JMPs to known function starts now record a call site instead of in
 **Phase 3 — Hybrid Analysis (IN PROGRESS):**
 - Trace infrastructure, platform abstraction, HybridAnalysisPass, SimpleTraceReader O(1) lookup
 - Pass dependency system — topological sort fixes critical bug where 4/6 passes silently no-opped
-- Bochs integration pending
+- Bochs integration: `BochsExecutor` and `BochsInstrumentationBridge` implemented
+- Full Bochs 3.0 build with instrumentation enabled, libraries at `Z:/bochs-install`
+- **Bochs init test** verifies siminterface, options, config parsing, and plugin loading
+- **Known blocker**: `bx_init_hardware()` crashes with 0xc0000005 during device init (likely `BX_INFO` or `bx_gui` due to static plugin linking issues)
 
-**Phase 4 — IR & Deobfuscation (IN PROGRESS):**
+**Phase 4 — IR & Deobfuscation (COMPLETE):**
 - LLVM 19.1.0 built from source, C++ libraries linked
-- Manual Lifter (Zydis + IRBuilder) lifts MOV, ADD, SUB, XOR, NOP, RET
+- **remill v6.0.1 integrated** as the sole binary lifter (replaced manual lifter)
 - IRLiftingPass auto-registered, lifts all basic blocks into single shared module
 - ConstantFoldingPass runs full optimization pipeline: SCCP → DCE → SimplifyCFG → InstCombine → GlobalDCE
-- **FIXED**: Crash resolved via `InternalLinkage` + `GlobalDCEPass` + `verifyModule()`
-- **FIXED**: CFG recovery bugs (mega-function, IAT entry points, off-by-one, tail-call detection)
+- All CFG recovery bugs fixed (mega-function, IAT entry points, off-by-one, tail-call detection)
+- Removed Unicorn dependency entirely from project (CMake, source, docs)
 
-**Phase 6 — UI/Database:** Not started
+**Phase 6 — UI/Database (IN PROGRESS):**
+- `ReWizardUI/` target created with stub `main.cpp`
+- UI designated as **primary entry point**, CLI as secondary
+- **DONE 6.1**: `AnalysisDatabase` with SQLite backend
+  - Schema: functions, basic_blocks, instructions, symbols, xrefs
+  - CRUD operations, transactions, upsert support
+  - FetchContent integration for SQLite3 amalgamation
+  - 8 database tests (all passing)
+- **DONE 6.2**: `XrefManager` — bidirectional in-memory xref index
+  - O(1) lookup by from/to address
+  - Typed queries: calls, jumps, data refs
+  - Persistence to/from `AnalysisDatabase`
+  - `StaticControlFlowRebuilder` populates xrefs during CFG recovery
+  - 8 xref tests (all passing)
 
-## Target Priority
-
-**x64 PE > x86 PE > Linux ELF > Mach-O**
-
-## Recommended Next Steps (in priority order)
-
-### 1. Expand Lifter Instruction Coverage
-
-Add: PUSH, POP, CALL, JMP, CMP, conditional branches (JZ, JNZ, JG, JL, etc.), memory load/store (MOV r/m, LEA), TEST, AND, OR, SHL, SHR, NEG, NOT, MUL, DIV. Handle flags via a separate flags register in the alloca array.
-
-### 2. Bochs Integration
-
-Design `IEmulator` interface, `BochsExecutor` with snapshot management, instrumentation hooks.
-
-### 3. remill Integration (long-term)
-
-Replace manual lifter with remill for comprehensive x86/x86_64 semantics. Requires remill build integration.
-
-### 4. Selective Lifting Scorer
-
-Design a heuristic scorer that marks functions as "needs IR lifting" based on:
-- Opaque predicate density (from AbstractInterpretationPass)
-- Indirect call/jump count
-- Code entropy (obfuscation indicator)
-- Function size vs. complexity ratio
-
-### 5. O(n) Function Lookup
-
-Replace linear scan in `Module::GetFunctionForAddress` with an interval tree or sorted vector + binary search.
+---
 
 ## Known Issues / Limitations
 
 - **JMP tail calls to undiscovered functions**: If a JMP target hasn't been discovered as a function yet, it will be inlined into the current function. Only JMPs to already-known function starts are correctly treated as tail calls.
 - **Debug builds blocked**: LLVM built with `/MD` (Release CRT), project Debug uses `/MDd`. Use `x64-release` preset only.
 - **`sub_1400021b0`**: Found by `LinearSweepFallback` in merged section — not a real function but passes exec check.
-- **Duplicate type definitions** in `Win32InternalTypes.hpp` — lines 343-667 duplicate lines 7-331.
+- **Bochs hardware init crash**: `bx_init_hardware()` crashes during device init. Likely caused by `genlog`/`theVga` null dereference or missing static plugin constructors for `nogui` display library.
 - **Thread safety** in `PassManager::RunAllAsync` — detached thread + `std::promise` lifetime risk.
-- **O(n) function lookup** — `Module::GetFunctionForAddress` is a linear scan.
-- **Hardcoded CLI path** — `main.cpp:11` has a local absolute path.
 - **WHOLEARCHIVE CMake** — the per-pass logic uses incomplete object paths.
+
+---
+
+## Recommended Next Steps (in priority order)
+
+### 1. Bochs Hardware Init Fix (Phase 3.6)
+
+- **Root cause**: `bx_init_hardware()` crashes with 0xc0000005 during `DEV_init_devices()` / VGA init.
+- **Hypothesis**: Static plugin linking (`gui.lib`, `iodev_display.lib`) may not pull `nogui.obj`/`vga.obj` constructors because no symbol is explicitly referenced. MSVC `/WHOLEARCHIVE` or explicit symbol reference may be needed.
+- **Alternative**: Bypass full `bx_init_hardware()` and manually initialize `BX_CPU_C`, `BX_MEM_C`, and `bx_pc_system` without device emulation.
+- Once init is stable:
+  - Rewrite `BochsExecutor.cpp` to use real Bochs init, memory mapping, register get/set, icount-guarded execution
+  - Update `BochsInstrumentationBridge.cpp` to capture actual CPU state (RIP, GPRs) during `bx_instr_before_execution`/`after_execution`
+  - Write end-to-end hybrid analysis test: load PE → static CFG → Bochs trace → verify indirect call resolution
+
+### 2. Symbol & Annotation Persistence (Phase 6.3)
+
+- `SymbolManager` — user-defined names, typed variables, function signatures, comments
+- Rename symbols: override auto-generated names (sub_401000 → main)
+- Function type annotations: calling convention, return type, parameter types
+- Inline comments: attach user notes to any address
+- Type system: structs, enums, typedefs
+- All annotations stored in database, survive re-analysis passes
+
+### 3. Deobfuscation Passes (Phase 4.2-4.5)
+
+- **Control Flow Flattening Recovery**: Pattern-match dispatcher state variables in LLVM IR
+- **Dead Code Elimination**: LLVM AggressiveDCE on remill-generated IR
+- **Binary Patching & Code Emission**: LLVM MC layer to emit x86 bytes from simplified IR
+
+### 4. Interactive UI (Phase 6.4-6.6)
+
+- Dear ImGui integration
+- Disassembly panel with symbol resolution and xref counts
+- Graph view: Boost.Graph-derived CFG visualization
+- Hex view: raw bytes with decoded instruction overlay
+- Function list & global search
+
+---
 
 ## Key Files
 
-- `ReWizardLib/source/IR/Lifter.cpp` — Manual lifter (Zydis + IRBuilder), shared module, `InternalLinkage`
-- `ReWizardLib/source/IR/LLVMOptimizer.cpp` — Full pipeline: SCCP → DCE → SimplifyCFG → InstCombine → GlobalDCE, `verifyModule()`
-- `ReWizardLib/source/IR/IRBlock.cpp` — IRBlock wrapper (holds raw `llvm::BasicBlock*`)
-- `ReWizardLib/source/Analysis/Passes/IRLiftingPass.cpp` — Creates single shared Lifter
-- `ReWizardLib/source/Analysis/Passes/ConstantFoldingPass.cpp` — Runs optimization once on shared module
+- `ReWizardLib/source/Database/AnalysisDatabase.cpp` — SQLite schema, CRUD, transactions
+- `ReWizardLib/source/Analysis/Units/XrefManager.cpp` — Bidirectional xref index
+- `ReWizardLib/source/Analysis/Passes/StaticControlFlowRebuilder.cpp` — CFG recovery, xref population
+- `ReWizardLib/source/IR/Lifter.cpp` — remill-based lifter
+- `ReWizardLib/source/IR/LLVMOptimizer.cpp` — Full pipeline: SCCP → DCE → SimplifyCFG → InstCombine → GlobalDCE
 - `ReWizardLib/source/Analysis/Passes/StaticControlFlowRebuilder.cpp` — CALL fix, IAT removal, exec-section guards, JMP tail-call detection
-- `ReWizardLib/include/ReWizard/Analysis/Passes/StaticControlFlowRebuilder.h` — Updated `HandleBranch` and `AnalyzeFunction` signatures
-- `ReWizardLib/source/Analysis/Units/Module.cpp` — `GetFunctionForAddress` exclusive-end fix
-- `tests/test_cfg.cpp` — NoMegaFunctions, FunctionsAreNotInlined regression tests
+- `ReWizardLib/source/Hybrid/BochsExecutor.cpp` — Bochs integration (needs rewrite for real init)
+- `ReWizardLib/source/Hybrid/BochsInstrumentationBridge.cpp` — Custom instrumentation (needs real CPU state capture)
+- `tests/test_database.cpp` — Database schema, function CRUD, transactions, persistence
+- `tests/test_xref_manager.cpp` — Xref add/remove/query, save/load, typed filtering
+- `tests/test_bochs_init.cpp` — Bochs siminterface, options, config parsing test
 - `scripts/build-llvm.ps1` — Idempotent LLVM 19.1.0 build script
+- `scripts/build-remill.ps1` — Idempotent remill v6.0.1 build script with x86-only patches
 
 ## Build Reminders
 
@@ -173,3 +146,5 @@ Replace linear scan in `Module::GetFunctionForAddress` with an interval tree or 
 - Release preset required when LLVM enabled (Debug CRT mismatch)
 - Boost at `Z:/boost/boost_1_85_0`, override with `-DBOOST_ROOT=Z:/boost/boost_1_85_0`
 - LLVM at `Z:/llvm-install/` (full C++ build), fallback `Z:/llvm/` (C API only)
+- remill at `Z:/remill-install/` (built via `scripts/build-remill.ps1`)
+- Bochs at `Z:/bochs-install/` (built via `scripts/build-bochs.ps1`)

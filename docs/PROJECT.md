@@ -2,6 +2,16 @@
 
 Binary analysis framework for x86/x86_64 reverse engineering, built on a pass-based architecture. Uses LLVM IR for deobfuscation and code emission, remill for binary lifting.
 
+## Entry Points
+
+| Entry Point | Purpose | Status |
+|-------------|---------|--------|
+| `ReWizardUI/main.cpp` | **Primary** — Dear ImGui-based interactive analysis UI | Planned (Phase 6) |
+| `ReWizardCLI/main.cpp` | **Secondary** — Command-line interface for headless/batch analysis | Working |
+
+The UI is the primary entry point for interactive reverse engineering. The CLI
+is retained for headless analysis, CI/CD pipelines, and scripting.
+
 ## Architecture
 
 ReWizard follows a **pass-based analysis pipeline** (inspired by compiler IR passes). An `AnalysisManager` owns an `AnalysisContext` (holding the binary mapping, module, and disassembler) and an `AnalysisPassManager` that runs registered passes in dependency order (topological sort of `Dependencies()` declarations). Passes auto-register via `PassRegistrar<T>` with static initialization and are instantiated by `PassProvider::Init()`.
@@ -26,7 +36,7 @@ AnalysisManager
 
 ### IR Layer (Phase 4+)
 
-Deobfuscation uses **LLVM IR** as the single intermediate representation. Remill (Trail of Bits) lifts x86 binary bytes → LLVM IR. LLVM's optimization passes handle constant folding, dead code elimination, and CFG simplification. The X86 backend emits correct machine code for binary patching.
+Deobfuscation uses **LLVM IR** as the single intermediate representation. **remill** (Trail of Bits) lifts x86/x86_64 binary bytes → LLVM IR with comprehensive instruction semantics (integer, X87, MMX, SSE, AVX, AVX512). LLVM's optimization passes handle constant folding, dead code elimination, and CFG simplification. The X86 backend emits correct machine code for binary patching.
 
 **One IR, one toolchain:**
 
@@ -34,12 +44,12 @@ Deobfuscation uses **LLVM IR** as the single intermediate representation. Remill
 Binary bytes ──(remill)──► LLVM IR ──(LLVM opts / custom passes)──► Optimized LLVM IR ──(X86 backend)──► Patched bytes
 ```
 
-- **remill** lifts x86/x86_64 binary instructions to LLVM IR — makes all side-effects explicit (register writes, memory stores, condition flags)
+- **remill** lifts x86/x86_64 binary instructions to LLVM IR — makes all side-effects explicit (register writes, memory stores, condition flags, status flags). Provides ~1500 instruction mnemonics including AVX, AVX512, X87, MMX, SSE. Apache-2.0 license, maintained by Trail of Bits, used in production by McSema.
 - **LLVM optimizer passes** — full pipeline: `SCCP → DCE → SimplifyCFG → InstCombine → GlobalDCE`. All passes now working. `GlobalDCE` removes dead internal functions after optimization.
 - **Custom ReWizard passes** operate on LLVM IR for CFF unflattening, opaque predicate simplification, and deobfuscation-specific transformations
 - **LLVM X86 backend** emits correct machine code — handles x86 encoding complexity (prefixes, ModRM, VEX/EVEX, REX.W) so we don't have to
 
-**We use existing lifters, not our own.** remill is maintained by Trail of Bits, used in production (McSema2), and supports x86, AMD64, AArch64.
+**We use existing lifters, not our own.** The initial manual lifter (Zydis+IRBuilder, 6/~1500 mnemonics) has been replaced with remill for comprehensive instruction semantics. RetDec's `capstone2llvmir` was evaluated and rejected due to LLVM 8.0.0 (Avast fork) incompatibility with our LLVM 19.
 
 **LLVM is integrated minimally.** Built with `-DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_ENABLE_PROJECTS=""`. No Clang, no linker, no frontend. ~2-3GB built, ~30-80MB linked binary size. Acceptable for a reversing suite.
 
@@ -49,7 +59,7 @@ Binary bytes ──(remill)──► LLVM IR ──(LLVM opts / custom passes)�
 |-------------------------|---------------|---------------------------|--------|
 | ImportAnalysisPass      | PEPass        | (none)                    | Working |
 | StaticControlFlowRebuilder | GenericPass | ImportAnalysisPass        | Working |
-| IRLiftingPass           | GenericPass   | StaticControlFlowRebuilder | Working |
+| IRLiftingPass           | GenericPass   | StaticControlFlowRebuilder | Working (remill-based lifting) |
 | ConstantFoldingPass     | GenericPass   | IRLiftingPass              | Working |
 | DataFlowAnalysisPass    | GenericPass   | StaticControlFlowRebuilder | Working |
 | AbstractInterpretationPass | GenericPass | StaticControlFlowRebuilder | Working |
@@ -60,27 +70,24 @@ Binary bytes ──(remill)──► LLVM IR ──(LLVM opts / custom passes)�
 
 ```
 IEmulator (interface)
-├── BochsExecutor      (primary) — full-system emulation, snapshot support
-├── UnicornExecutor    (optional) — micro-execution fast-path
+├── BochsExecutor      — full-system emulation, snapshot support
 └── SimpleTraceReader  (file-based) — JSON trace replay
 
 HybridAnalysisPass ← ITraceReader ← IEmulator
 ```
 
-**Bochs** is the primary backend: boot a Windows VM once, snapshot CPU+memory state, restore per analysis session. No API stubs needed.
-
-**Unicorn** is the optional accelerator: simple arithmetic predicates and short code regions. Falls back to Bochs for complex cases.
+**Bochs** is the sole emulation backend: boot a Windows VM once, snapshot CPU+memory state, restore per analysis session. No API stubs needed.
 
 ### Third-Party Dependencies
 
 | Library  | Version / Branch      | Purpose                                  |
 |----------|-----------------------|------------------------------------------|
-| Zydis    | v4.1.0                | x86/x86_64 instruction decode & format   |
+| Zydis    | v4.1.0                | x86/x86_64 instruction decode & format (display/analysis passes) |
 | LIEF     | extended_build_patch  | PE/ELF/MachO binary parsing              |
 | LLVM     | v19+ (X86 target only) | IR analysis, optimization passes, X86 code emission |
-| remill   | (Trail of Bits)       | Binary lifter: x86/x86_64 bytes → LLVM IR |
-| Unicorn  | v2.1.0 (x86 only)     | CPU micro-execution (optional accelerator) |
-| Bochs    | (TBD)                 | Full-system emulation (primary backend)   |
+| remill   | v6.0.1 (Trail of Bits) | Binary lifter: x86/x86_64 bytes → LLVM IR (replaces manual lifter) |
+| Intel XED | (bundled with remill) | Instruction decoding for remill semantics (not a direct ReWizard dependency) |
+| Bochs    | 3.0 (built from source) | Full-system emulation (sole backend)       |
 | Boost    | 1.85.0                | Graph (adjacency_list, GraphViz output)   |
 | spdlog   | (via LIEF)            | Logging                                  |
 
@@ -88,12 +95,25 @@ HybridAnalysisPass ← ITraceReader ← IEmulator
 
 ## Build
 
-```bash
-cmake --preset x64-debug   # or x64-release
-cmake --build out/build/x64-debug
+### 1. Gather Windows System Binaries (required for Bochs emulation)
+
+```powershell
+.\scripts\gather-windows-binaries.ps1
 ```
 
-Requires MSVC + Ninja. Boost must be at `C:/boost/x64/{debug,release}` or overridden via `-DBOOST_INSTALL=...`.
+This copies `ntoskrnl.exe`, `hal.dll`, `ntdll.dll`, `kernel32.dll`, and
+`kernelbase.dll` from your licensed Windows installation into `binaries/`.
+These are required for Bochs emulation and are **excluded from git**.
+
+### 2. Build
+
+```bash
+cmake --preset x64-release
+cmake --build out/build/x64-release
+```
+
+Requires MSVC + Ninja. Boost must be at `C:/boost/x64/{debug,release}` or
+overridden via `-DBOOST_INSTALL=...`.
 
 ## Known Issues
 
@@ -136,7 +156,7 @@ ReWizard targets an IDA Pro-like interactive analysis experience. The architectu
 | Goal                        | Description |
 |-----------------------------|-------------|
 | **Static Analysis**         | Recursive descent disassembly, data flow, abstract interpretation |
-| **Hybrid Analysis**         | Bochs full-system emulation with snapshot support; Unicorn optional micro-execution |
+| **Hybrid Analysis**         | Bochs full-system emulation with snapshot support |
 | **Deobfuscation**           | LLVM IR-based transformations: constant folding, dead code elimination, CFF flattening recovery |
 | **Binary Patching**         | remill lifts x86→LLVM IR, LLVM X86 backend emits optimized code, patch binary in-place |
 | **Cross-Platform**          | Windows first (x64 PE primary, x86 PE secondary), Linux third (ELF), macOS last (Mach-O) |

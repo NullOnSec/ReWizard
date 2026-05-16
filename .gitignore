@@ -292,6 +292,19 @@ opencode.json
 # Reference prototype (not part of main project)
 binspektor-main/
 
+# Windows system binaries (copied from host OS, not in repo)
+/binaries/*.exe
+/binaries/*.dll
+/binaries/*.sys
+/binaries/*.reg
+/binaries/SYSTEM
+/binaries/SOFTWARE
+
+# Temporary IR dumps
+rewizard_pre_opt.ll
+test_output.json
+example-out
+
 # Visual Studio 6 build log
 *.plg
 
