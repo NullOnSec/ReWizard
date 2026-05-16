@@ -9,4 +9,7 @@ target_include_directories(ReWizardCli PRIVATE
 	"${CMAKE_SOURCE_DIR}/ReWizardLib/include"
 )
 
-target_link_libraries(ReWizardCli PRIVATE LIEF::LIEF Zydis Boost::headers lief_spdlog ReWizardLib)
+target_link_libraries(ReWizardCli PRIVATE LIEF::LIEF Zydis Boost::headers lief_spdlog ReWizardLib BochsRuntime)
+if (MSVC)
+    target_link_options(ReWizardCli PRIVATE /FORCE:MULTIPLE)
+endif()

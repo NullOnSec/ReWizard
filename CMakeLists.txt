@@ -37,9 +37,28 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
+# Fetch SQLite3 (amalgamation)
+FetchContent_Declare(
+    sqlite3
+    URL https://www.sqlite.org/2024/sqlite-amalgamation-3460100.zip
+)
+FetchContent_GetProperties(sqlite3)
+if(NOT sqlite3_POPULATED)
+    FetchContent_Populate(sqlite3)
+    # SQLite3 amalgamation doesn't have a CMakeLists.txt, so we create the target manually
+    add_library(sqlite3 STATIC
+        ${sqlite3_SOURCE_DIR}/sqlite3.c
+    )
+    target_include_directories(sqlite3 PUBLIC ${sqlite3_SOURCE_DIR})
+    if(MSVC)
+        target_compile_options(sqlite3 PRIVATE /wd4267 /wd4244)
+    endif()
+endif()
+
 add_subdirectory("thirdparty")
 add_subdirectory("ReWizardLib")
 add_subdirectory("ReWizardCLI")
+add_subdirectory("ReWizardUI")
 
 enable_testing()
 add_subdirectory("tests")
