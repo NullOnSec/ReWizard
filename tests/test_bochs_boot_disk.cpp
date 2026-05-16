@@ -273,3 +273,124 @@ TEST(BochsBootDiskTest, ExecuteNopsThenHltInLongMode) {
             << "After 3 NOPs + HLT, RIP should be at 0x10004";
     }
 }
+
+static void SetupLongModeCPU(Bit64u pml4Base) {
+    Bit8u gdt[24] = {};
+    gdt[8] = 0x9A; gdt[9] = 0x20;
+    gdt[16] = 0xFF; gdt[17] = 0xFF;
+    gdt[20] = 0; gdt[21] = 0x92;
+    WritePageChunked(0x60000, gdt, 24);
+
+    bx_segment_reg_t codeSeg = {};
+    codeSeg.selector.value = 0x08;
+    codeSeg.cache.u.segment.base = 0;
+    codeSeg.cache.u.segment.limit_scaled = 0xFFFFFFFF;
+    codeSeg.cache.p = 1;
+    codeSeg.cache.segment = 1;
+    codeSeg.cache.type = BX_DATA_READ_WRITE_ACCESSED;
+    codeSeg.cache.dpl = 0;
+    codeSeg.cache.u.segment.l = 1;
+    codeSeg.cache.u.segment.g = 1;
+
+    bx_segment_reg_t dataSeg = {};
+    dataSeg.selector.value = 0x10;
+    dataSeg.cache.u.segment.base = 0;
+    dataSeg.cache.u.segment.limit_scaled = 0xFFFFFFFF;
+    dataSeg.cache.p = 1;
+    dataSeg.cache.segment = 1;
+    dataSeg.cache.type = BX_DATA_READ_WRITE_ACCESSED;
+    dataSeg.cache.dpl = 0;
+    dataSeg.cache.u.segment.g = 1;
+
+    BX_CPU(0)->sregs[BX_SEG_REG_CS] = codeSeg;
+    BX_CPU(0)->sregs[BX_SEG_REG_DS] = dataSeg;
+    BX_CPU(0)->sregs[BX_SEG_REG_ES] = dataSeg;
+    BX_CPU(0)->sregs[BX_SEG_REG_SS] = dataSeg;
+    BX_CPU(0)->sregs[BX_SEG_REG_FS] = dataSeg;
+    BX_CPU(0)->sregs[BX_SEG_REG_GS] = dataSeg;
+
+    BX_CPU(0)->gen_reg[BX_64BIT_REG_RSP].rrx = 0x90000;
+
+    BX_CPU(0)->cr0.val32 = 0x00000001;
+    BX_CPU(0)->cr0.set_PE(1);
+    BX_CPU(0)->cr4.set_PAE(1);
+    BX_CPU(0)->cr3 = pml4Base;
+    BX_CPU(0)->efer.set32(0x500);
+    BX_CPU(0)->efer.set_LMA(1);
+    BX_CPU(0)->cr0.val32 = 0x80000001;
+    BX_CPU(0)->cpu_mode = BX_MODE_LONG_64;
+}
+
+static Bit64u SetupIdentityMapping() {
+    const Bit64u pml4Base = 0x70000;
+    const Bit64u pdptBase = 0x71000;
+    const Bit64u pdBase = 0x72000;
+
+    Bit8u pml4[4096] = {};
+    Bit8u pdpt[4096] = {};
+    Bit8u pd[4096] = {};
+
+    Bit64u* pml4e = reinterpret_cast<Bit64u*>(pml4);
+    pml4e[0] = pdptBase | 0x03;
+
+    Bit64u* pdpte = reinterpret_cast<Bit64u*>(pdpt);
+    pdpte[0] = pdBase | 0x03;
+
+    Bit64u* pde = reinterpret_cast<Bit64u*>(pd);
+    for (int i = 0; i < 256; i++) {
+        pde[i] = (static_cast<Bit64u>(i) * 0x200000) | 0x83;
+    }
+
+    WritePageChunked(pml4Base, pml4, 4096);
+    WritePageChunked(pdptBase, pdpt, 4096);
+    WritePageChunked(pdBase, pd, 4096);
+
+    return pml4Base;
+}
+
+TEST(BochsBootDiskTest, KernelStubWritesToVgaBuffer) {
+    auto diskPath = GetBootDiskPath();
+    if (!std::filesystem::exists(diskPath)) {
+        GTEST_SKIP() << "Boot disk image not found";
+    }
+
+    std::ifstream f(diskPath, std::ios::binary | std::ios::ate);
+    ASSERT_TRUE(f.is_open());
+    auto fileSize = f.tellg();
+    f.seekg(0, std::ios::beg);
+    std::vector<uint8_t> diskImage(static_cast<size_t>(fileSize));
+    f.read(reinterpret_cast<char*>(diskImage.data()), fileSize);
+    f.close();
+
+    if (diskImage.size() < 513) {
+        GTEST_SKIP() << "Boot disk image too small";
+    }
+
+    BochsExecutor executor;
+    executor.SetDiskImage(diskPath);
+    ASSERT_TRUE(executor.Initialize());
+
+    Bit64u pml4Base = SetupIdentityMapping();
+
+    const uint8_t* kernel = diskImage.data() + 512;
+    size_t kernelSize = diskImage.size() - 512;
+    if (kernelSize > 4096) kernelSize = 4096;
+
+    uint8_t pageBuf[4096] = {};
+    std::memcpy(pageBuf, kernel, kernelSize);
+    BX_MEM(0)->writePhysicalPage(BX_CPU(0), 0x10000, 4096, pageBuf);
+
+    SetupLongModeCPU(pml4Base);
+    BX_CPU(0)->gen_reg[BX_64BIT_REG_RIP].rrx = 0x10000;
+
+    bx_guard.guard_for |= BX_DBG_GUARD_ICOUNT;
+    BX_CPU(0)->guard_found.icount_max = BX_CPU(0)->get_icount() + 200;
+    BX_CPU(0)->cpu_loop_debugger();
+
+    if (BX_CPU(0)->get_cpu_mode() == BX_MODE_LONG_64) {
+        Bit8u vga[16] = {};
+        BX_MEM(0)->readPhysicalPage(BX_CPU(0), 0xB8000, 16, vga);
+        EXPECT_EQ(vga[0], 'R') << "First VGA character should be 'R'";
+        EXPECT_EQ(vga[2], 'e') << "Second VGA character should be 'e'";
+    }
+}
