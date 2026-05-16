@@ -157,10 +157,11 @@ namespace ReWizard {
                 ofs << "mouse: enabled=0\n";
                 ofs << "pci: enabled=1, chipset=i440fx\n";
                 ofs << "clock: sync=none, time0=local\n";
-                ofs << "ata0: enabled=1, ioaddr1=0x1f0, ioaddr2=0x3f0, irq=14\n";
                 if (!impl_->diskImagePath.empty()) {
-                    ofs << "ata0-master: type=disk, path=\"" << impl_->diskImagePath.string() << "\", mode=flat\n";
-                    ofs << "boot: disk\n";
+                    ofs << "floppya: 1_44=\"" << impl_->diskImagePath.string() << "\", status=inserted\n";
+                    ofs << "boot: floppy\n";
+                } else {
+                    ofs << "ata0: enabled=1, ioaddr1=0x1f0, ioaddr2=0x3f0, irq=14\n";
                 }
                 // If no disk image, omit 'boot:' entirely. Bochs defaults to floppy,
                 // and 'boot: none' is explicitly rejected by bx_read_configuration().
