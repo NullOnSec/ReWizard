@@ -4,6 +4,7 @@
 #include <ReWizard/FileLoader/FileLoader.h>
 #include <ReWizard/Analysis/Units/Function.h>
 #include <ReWizard/Analysis/Units/SymbolTable.h>
+#include <ReWizard/Analysis/Units/XrefManager.h>
 #include <ReWizard/Analysis/AnalysisManager.h>
 
 #include <memory>
@@ -62,6 +63,9 @@ namespace ReWizard {
 		SymbolTable* GetSymbolTable() { return &m_symbolTable; }
 		const SymbolTable* GetSymbolTable() const { return &m_symbolTable; }
 
+		XrefManager* GetXrefManager() { return &m_xrefManager; }
+		const XrefManager* GetXrefManager() const { return &m_xrefManager; }
+
 	private:
 		Module(AnalysisContext* context);
 
@@ -70,6 +74,7 @@ namespace ReWizard {
 		FunctionCollection m_functions;
 		std::map<uintptr_t, Function*> m_functionByStart;
 		SymbolTable m_symbolTable;
+		XrefManager m_xrefManager;
 	};
 
 }

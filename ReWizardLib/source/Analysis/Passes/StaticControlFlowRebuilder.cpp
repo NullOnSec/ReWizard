@@ -1,5 +1,6 @@
 #include <ReWizard/Analysis/Passes/StaticControlFlowRebuilder.h>
 #include <ReWizard/Analysis/Units/Module.h>
+#include <ReWizard/Analysis/Units/XrefManager.h>
 #include <ReWizard/Analysis/AnalysisContext.h>
 #include <ReWizard/FileLoader/FileLoader.h>
 #include <ReWizard/Analysis/Units/SymbolTable.h>
@@ -255,23 +256,28 @@ namespace ReWizard {
     }
 
     void StaticControlFlowRebuilder::HandleCall(AnalysisContext* context, ExtendedInstruction* insn, uintptr_t pc, std::unique_ptr<Function>& function, std::unique_ptr<BasicBlock>& bb, std::queue<uintptr_t>& functionWork) {
+        auto* xrefs = context->GetModule()->GetXrefManager();
         const auto& op0 = insn->Operands()[0];
         if (op0.type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
             auto target = pc + insn->Instruction().length + op0.imm.value.u;
             function->AddCallSite(pc, target);
+            xrefs->AddXref(pc, target, "call");
             // Enqueue direct call target as a new function entry point
             if (context->GetLoader()->IsWithinMapping(target) && !context->GetVisited().contains(target) && IsExecutableAddress(context->GetLoader(), target))
                 functionWork.push(target);
         } else if (op0.type == ZYDIS_OPERAND_TYPE_MEMORY && op0.mem.base == ZYDIS_REGISTER_RIP) {
             auto ripTarget = pc + insn->Instruction().length + op0.mem.disp.value;
             function->AddCallSite(pc, ripTarget);
+            xrefs->AddXref(pc, ripTarget, "call");
         } else if (op0.type == ZYDIS_OPERAND_TYPE_MEMORY &&
             op0.mem.base == ZYDIS_REGISTER_NONE &&
             op0.mem.index == ZYDIS_REGISTER_NONE) {
             auto absTarget = static_cast<uintptr_t>(op0.mem.disp.value);
             function->AddCallSite(pc, absTarget);
+            xrefs->AddXref(pc, absTarget, "call");
         } else {
             function->AddCallSite(pc, insn->IndirectValue());
+            xrefs->AddXref(pc, insn->IndirectValue(), "call");
             insn->IsIndirect() = true;
             bb->SetContainsIndirectCalls(true);
             function->SetContainsIndirectCalls(true);
@@ -279,6 +285,7 @@ namespace ReWizard {
     }
 
     void StaticControlFlowRebuilder::HandleBranch(AnalysisContext* context, ExtendedInstruction* insn, uintptr_t pc, std::unique_ptr<Function>& function, std::unique_ptr<BasicBlock>& bb, std::queue<uintptr_t>& work, std::queue<uintptr_t>& functionWork) {
+        auto* xrefs = context->GetModule()->GetXrefManager();
         const auto& op0 = insn->Operands()[0];
         uintptr_t imgBase = context->GetLoader()->CurrentImageBase();
         uintptr_t imgEnd = imgBase + context->GetLoader()->MappedSize();
@@ -292,13 +299,16 @@ namespace ReWizard {
                     auto existingFn = module->GetFunctionForAddress(target);
                     if (existingFn) {
                         function->AddCallSite(pc, target);
+                        xrefs->AddXref(pc, target, "jump");
                     } else if (!context->GetVisited().contains(target)) {
                         work.push(target);
                         functionWork.push(target);
+                        xrefs->AddXref(pc, target, "jump");
                     }
                 } else {
                     if (!context->GetVisited().contains(target))
                         work.push(target);
+                    xrefs->AddXref(pc, target, "jump");
                 }
                 bb->AddSuccessor(target);
             } else if (target < imgBase || target >= imgEnd) {
@@ -307,12 +317,15 @@ namespace ReWizard {
         } else if (op0.type == ZYDIS_OPERAND_TYPE_REGISTER || op0.type == ZYDIS_OPERAND_TYPE_MEMORY) {
             insn->IsIndirect() = true;
             function->AddCallSite(pc, insn->IndirectValue());
+            xrefs->AddXref(pc, insn->IndirectValue(), "jump");
             function->SetContainsIndirectJumps(true);
             bb->SetContainsIndirectJumps(true);
         }
 
-        if (insn->Instruction().meta.category == ZYDIS_CATEGORY_COND_BR)
+        if (insn->Instruction().meta.category == ZYDIS_CATEGORY_COND_BR) {
             bb->AddSuccessor(pc + insn->Instruction().length);
+            xrefs->AddXref(pc, pc + insn->Instruction().length, "jump");
+        }
 
         bb->SetEnd(pc + insn->Instruction().length);
         bb->SetLastInsnAddr(pc);
